@@ -26,13 +26,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
 input[type=date]::-webkit-calendar-picker-indicator{filter:${dark ? "invert(.8)" : "none"}}
 @media(max-width:760px){
 .sb{display:none!important}
-.pg{padding:12px 14px!important}
+.pg{padding:12px 14px 24px!important}
 .kpis{flex-direction:column!important}
 .cg2,.cg3{grid-template-columns:1fr!important}
 .fg2,.fg3{grid-template-columns:1fr!important}
 .tbl-wrap{overflow-x:auto}
 .mhide{display:none!important}
-.top-tabs{display:flex!important}
+.mshow{display:flex!important}
+.m-only{display:flex!important;flex-direction:column;gap:12px}
 }
-@media(min-width:761px){.top-tabs{display:none!important}}
+@media(min-width:761px){
+.mshow{display:none!important}
+.m-only{display:none!important}
+}
 `;

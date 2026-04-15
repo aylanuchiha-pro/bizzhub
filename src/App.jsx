@@ -3,7 +3,7 @@ import { supabase } from "./supabase";
 import { M, uid, active, trashed, TRASH_MS } from "./utils";
 import { CSS } from "./theme";
 import Auth from "./components/Auth";
-import { Sidebar, TopTabs } from "./components/Sidebar";
+import { Sidebar, MobileNav } from "./components/Sidebar";
 import Dashboard from "./views/Dashboard";
 import Businesses from "./views/Businesses";
 import Products from "./views/Products";
@@ -75,6 +75,7 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [dark, setDark] = useState(false);
   const [tab, setTab] = useState("dashboard");
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const [biz, setBiz] = useState([]);
   const [prods, setProds] = useState([]);
@@ -85,6 +86,7 @@ export default function App() {
   const [salePartners, setSalePartners] = useState([]);
   const [payments, setPayments] = useState([]);
   const [subs, setSubs] = useState([]);
+  const [expenses, setExpenses] = useState([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -98,7 +100,7 @@ export default function App() {
       if (event === "SIGNED_OUT") {
         setBiz([]); setProds([]); setSales([]);
         setRentalAssets([]); setRentalBookings([]);
-        setPartners([]); setSalePartners([]); setPayments([]); setSubs([]);
+        setPartners([]); setSalePartners([]); setPayments([]); setSubs([]); setExpenses([]);
         setTab("dashboard"); setLoaded(true);
       }
     });
@@ -110,7 +112,7 @@ export default function App() {
     const now = Date.now();
     const keep = x => !(x.deleted_at && (now - new Date(x.deleted_at).getTime()) >= TRASH_MS);
 
-    const [b, p, s, ra, rb, pt, sp, pm, sb] = await Promise.all([
+    const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.all([
       supabase.from("businesses").select("*"),
       supabase.from("products").select("*"),
       supabase.from("sales").select("*"),
@@ -120,6 +122,7 @@ export default function App() {
       supabase.from("sale_partners").select("*"),
       supabase.from("partner_payments").select("*"),
       supabase.from("subscriptions").select("*"),
+      supabase.from("product_expenses").select("*"),
     ]);
 
     setBiz((b.data || []).filter(keep).map(M.biz.from));
@@ -131,6 +134,7 @@ export default function App() {
     setSalePartners((sp.data || []).map(M.sp.from));
     setPayments((pm.data || []).map(M.payment.from));
     setSubs((sb.data || []).filter(keep).map(M.sub.from));
+    setExpenses((ex.data || []).map(M.expense.from));
 
     setDark(localStorage.getItem("bhub_theme") === "dark");
     setLoaded(true);
@@ -147,6 +151,18 @@ export default function App() {
   const spA      = mkActions("sale_partners",   M.sp,      salePartners,   setSalePartners,   userId);
   const subA     = mkActions("subscriptions",   M.sub,     subs,           setSubs,           userId);
   const paymentA = mkPaymentActions(setPayments, userId);
+
+  const expenseA = {
+    add: async item => {
+      setExpenses(s => [...s, item]);
+      const { error } = await supabase.from("product_expenses").insert(M.expense.to(item, userId));
+      if (error) console.error("[product_expenses] add:", error.message);
+    },
+    hardDel: async id => {
+      setExpenses(s => s.filter(x => x.id !== id));
+      await supabase.from("product_expenses").delete().eq("id", id);
+    },
+  };
 
   const deleteBiz = async id => {
     const now = Date.now();
@@ -182,9 +198,9 @@ export default function App() {
 
   const shared = {
     biz, prods, sales, rentalAssets, rentalBookings,
-    partners, salePartners, payments, subs,
+    partners, salePartners, payments, subs, expenses,
     bizA, prodA, saleA, assetA, bookingA,
-    partnerA, spA, subA, paymentA, deleteBiz,
+    partnerA, spA, subA, paymentA, expenseA, deleteBiz,
   };
 
   const views = {
@@ -203,18 +219,38 @@ export default function App() {
       <style>{CSS(dark)}</style>
       <Sidebar tab={tab} setTab={setTab} businesses={aBiz} username={username} onLogout={logout} dark={dark} onToggleDark={toggleDark} trashCount={trashCount} />
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        {/* Desktop sticky header */}
         <div className="mhide" style={{ padding: "14px 24px", borderBottom: "1px solid var(--brd)", background: "var(--sdbar)", display: "flex", alignItems: "center", position: "sticky", top: 0, zIndex: 20 }}>
           <p style={{ fontSize: 15, fontWeight: 700 }}>{TAB_LABELS[tab]}</p>
         </div>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--brd)", background: "var(--sdbar)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <p style={{ fontSize: 15, fontWeight: 700 }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
-          <p style={{ fontSize: 11, color: "var(--mut)" }}>@{username}</p>
+        {/* Mobile top bar avec hamburger */}
+        <div className="mshow" style={{ display: "none", padding: "0 4px 0 16px", borderBottom: "1px solid var(--brd)", background: "var(--sdbar)", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, zIndex: 20, minHeight: 52 }}>
+          <p onClick={() => setTab("dashboard")} style={{ fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <p style={{ fontSize: 12, fontWeight: 500, color: "var(--sub)" }}>{TAB_LABELS[tab]}</p>
+            <button
+              onClick={() => setMenuOpen(true)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: "12px", color: "var(--txt)", fontFamily: "inherit", display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center" }}
+              aria-label="Menu"
+            >
+              <span style={{ display: "block", width: 20, height: 2, background: "currentColor", borderRadius: 2 }} />
+              <span style={{ display: "block", width: 20, height: 2, background: "currentColor", borderRadius: 2 }} />
+              <span style={{ display: "block", width: 20, height: 2, background: "currentColor", borderRadius: 2 }} />
+            </button>
+          </div>
         </div>
-        <TopTabs tab={tab} setTab={setTab} trashCount={trashCount} dark={dark} onToggleDark={toggleDark} onLogout={logout} />
         <div className="pg" style={{ flex: 1, padding: "22px 24px", overflowY: "auto" }}>
           {views[tab]}
         </div>
       </div>
+      <MobileNav
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        tab={tab} setTab={setTab}
+        businesses={aBiz} username={username}
+        dark={dark} onToggleDark={toggleDark}
+        onLogout={logout} trashCount={trashCount}
+      />
     </div>
   );
 }

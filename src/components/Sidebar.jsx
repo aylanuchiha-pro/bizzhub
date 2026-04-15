@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Btn, Divider } from "./ui";
 
 export const NAV = [
@@ -26,7 +27,7 @@ export function Sidebar({ tab, setTab, businesses, username, onLogout, dark, onT
   return (
     <div className="sb" style={{ width: 215, background: "var(--sdbar)", borderRight: "1px solid var(--brd)", display: "flex", flexDirection: "column", flexShrink: 0, minHeight: "100vh" }}>
       <div style={{ padding: "22px 18px 16px" }}>
-        <p style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-.01em" }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
+        <p onClick={() => setTab("dashboard")} style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-.01em", cursor: "pointer" }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
         <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>@{username}</p>
       </div>
       <Divider />
@@ -57,22 +58,76 @@ export function Sidebar({ tab, setTab, businesses, username, onLogout, dark, onT
   );
 }
 
-export function TopTabs({ tab, setTab, trashCount, dark, onToggleDark, onLogout }) {
+export function MobileNav({ open, onClose, tab, setTab, businesses, username, dark, onToggleDark, onLogout, trashCount }) {
+  const pick = id => { setTab(id); onClose(); };
+
   return (
-    <div className="top-tabs" style={{ display: "none", overflowX: "auto", borderBottom: "1px solid var(--brd)", background: "var(--sdbar)", padding: "0 12px", gap: 2, flexShrink: 0, alignItems: "center" }}>
-      {NAV.map(n => {
-        const act = tab === n.id;
-        return (
-          <button key={n.id} onClick={() => setTab(n.id)}
-            style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", borderBottom: `2px solid ${act ? "var(--ac)" : "transparent"}`, color: act ? "var(--ac)" : "var(--sub)", padding: "11px 9px", cursor: "pointer", fontFamily: "inherit", fontSize: 11, fontWeight: act ? 600 : 400, whiteSpace: "nowrap", flexShrink: 0 }}>
-            {n.l.split(" ")[0]}
-            {n.id === "trash" && trashCount > 0 && <span style={{ background: "var(--warn)", color: "#fff", borderRadius: 10, fontSize: 9, padding: "0 5px", fontWeight: 700 }}>{trashCount}</span>}
+    <>
+      {/* Overlay */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 300,
+          opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none",
+          transition: "opacity .22s",
+        }}
+      />
+      {/* Drawer latéral */}
+      <div style={{
+        position: "fixed", top: 0, left: 0, bottom: 0, width: 272,
+        background: "var(--w)", zIndex: 301,
+        display: "flex", flexDirection: "column",
+        transform: open ? "translateX(0)" : "translateX(-100%)",
+        transition: "transform .25s cubic-bezier(.4,0,.2,1)",
+        boxShadow: "6px 0 32px rgba(0,0,0,.18)",
+      }}>
+        {/* En-tête */}
+        <div style={{ padding: "20px 16px 14px", borderBottom: "1px solid var(--brd)", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <p onClick={() => { setTab("dashboard"); onClose(); }} style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-.01em", cursor: "pointer" }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
+            <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>@{username}</p>
+          </div>
+          <button onClick={onClose} style={{ background: "var(--surf)", border: "1px solid var(--brd)", borderRadius: 8, width: 32, height: 32, cursor: "pointer", fontSize: 16, color: "var(--mut)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}>×</button>
+        </div>
+
+        {/* Navigation */}
+        <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}>
+          {NAV.map(n => {
+            const act = tab === n.id;
+            return (
+              <button key={n.id} onClick={() => pick(n.id)}
+                style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", background: act ? "var(--acb)" : "transparent", border: "none", borderRadius: 10, padding: "12px 14px", cursor: "pointer", color: act ? "var(--ac)" : "var(--txt)", fontFamily: "inherit", fontSize: 14, fontWeight: act ? 600 : 400, marginBottom: 2 }}>
+                <span style={{ fontSize: 15, flexShrink: 0, opacity: .85 }}>{n.ic}</span>
+                <span style={{ flex: 1, textAlign: "left" }}>{n.l}</span>
+                {n.id === "trash" && trashCount > 0 &&
+                  <span style={{ background: "var(--warn)", color: "#fff", borderRadius: 10, fontSize: 10, padding: "1px 7px", fontWeight: 700 }}>{trashCount}</span>
+                }
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Activités */}
+        {businesses.length > 0 && (
+          <div style={{ padding: "8px 16px 10px", borderTop: "1px solid var(--brd)" }}>
+            <p style={{ fontSize: 10, fontWeight: 600, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 7 }}>Activités</p>
+            {businesses.map(b => (
+              <div key={b.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0" }}>
+                <div style={{ width: 7, height: 7, borderRadius: "50%", background: b.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, color: "var(--sub)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pied */}
+        <div style={{ padding: "10px 8px", borderTop: "1px solid var(--brd)", display: "flex", gap: 6 }}>
+          <button onClick={onToggleDark} style={{ background: "var(--surf)", border: "1px solid var(--brd)", borderRadius: 8, padding: "7px 11px", cursor: "pointer", fontSize: 14, color: "var(--sub)", fontFamily: "inherit", flexShrink: 0 }}>
+            {dark ? "☀" : "🌙"}
           </button>
-        );
-      })}
-      <div style={{ flex: 1 }} />
-      <button onClick={onToggleDark} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: "8px 6px", color: "var(--sub)", flexShrink: 0 }}>{dark ? "☀" : "🌙"}</button>
-      <Btn sm variant="ghost" onClick={onLogout}>✕</Btn>
-    </div>
+          <Btn variant="ghost" onClick={onLogout} sm style={{ flex: 1 }}>Déconnexion</Btn>
+        </div>
+      </div>
+    </>
   );
 }
