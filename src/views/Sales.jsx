@@ -13,6 +13,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   const [ok, setOk] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [searchQ, setSearchQ] = useState("");
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -71,7 +72,11 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   });
 
   const aSales = active(sales);
-  const filtered = [...aSales].filter(s => filterBiz === "all" || s.bizId === filterBiz).sort((a, b) => b.date.localeCompare(a.date));
+  const sq = searchQ.trim().toLowerCase();
+  const filtered = [...aSales]
+    .filter(s => filterBiz === "all" || s.bizId === filterBiz)
+    .filter(s => !sq || s.name.toLowerCase().includes(sq) || (s.notes || "").toLowerCase().includes(sq))
+    .sort((a, b) => b.date.localeCompare(a.date));
   const totCa = filtered.reduce((a, s) => a + s.sellPrice * s.qty, 0);
   const totP = filtered.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
   const sN = parseFloat(form.sellPrice) || 0, cN = parseFloat(form.costPrice) || 0, qN = parseInt(form.qty) || 1;
@@ -154,13 +159,21 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   return (
     <div>
       {/* Barre filtres + bouton */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {[{ id: "all", l: "Toutes" }, ...aBiz.map(b => ({ id: b.id, l: b.name }))].map(f => (
-            <button key={f.id} onClick={() => setFilterBiz(f.id)} style={{ background: filterBiz === f.id ? "var(--acb)" : "transparent", border: `1px solid ${filterBiz === f.id ? "var(--ac)" : "var(--brd)"}`, color: filterBiz === f.id ? "var(--ac)" : "var(--sub)", borderRadius: 8, padding: "6px 13px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: filterBiz === f.id ? 600 : 400 }}>{f.l}</button>
-          ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {[{ id: "all", l: "Toutes" }, ...aBiz.map(b => ({ id: b.id, l: b.name }))].map(f => (
+              <button key={f.id} onClick={() => setFilterBiz(f.id)} style={{ background: filterBiz === f.id ? "var(--acb)" : "transparent", border: `1px solid ${filterBiz === f.id ? "var(--ac)" : "var(--brd)"}`, color: filterBiz === f.id ? "var(--ac)" : "var(--sub)", borderRadius: 8, padding: "6px 13px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: filterBiz === f.id ? 600 : 400 }}>{f.l}</button>
+            ))}
+          </div>
+          <Btn variant="pri" onClick={() => setShowForm(v => !v)}>{showForm ? "↑ Masquer" : "+ Nouvelle vente"}</Btn>
         </div>
-        <Btn variant="pri" onClick={() => setShowForm(v => !v)}>{showForm ? "↑ Masquer" : "+ Nouvelle vente"}</Btn>
+        <input
+          value={searchQ}
+          onChange={e => setSearchQ(e.target.value)}
+          placeholder="Rechercher une vente…"
+          style={{ maxWidth: 320 }}
+        />
       </div>
 
       {showForm && <FormBlock />}

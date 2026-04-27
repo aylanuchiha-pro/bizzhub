@@ -240,6 +240,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   const [form, setForm] = useState(emptyProd);
   const [filterBiz, setFilterBiz] = useState("all");
   const [filterCat, setFilterCat] = useState("all");
+  const [searchQ, setSearchQ] = useState("");
   const [editStock, setEditStock] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -283,9 +284,11 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     setSellModal(null);
   };
 
+  const q = searchQ.trim().toLowerCase();
   const filtered = active(prods)
     .filter(p => filterBiz === "all" || p.bizId === filterBiz)
-    .filter(p => filterCat === "all" || p.category === filterCat);
+    .filter(p => filterCat === "all" || p.category === filterCat)
+    .filter(p => !q || p.name.toLowerCase().includes(q) || (p.description || "").toLowerCase().includes(q));
 
   const FBtn = ({ id, label, act, onClick }) => (
     <button onClick={onClick} style={{ background: act ? "var(--acb)" : "transparent", border: `1px solid ${act ? "var(--ac)" : "var(--brd)"}`, color: act ? "var(--ac)" : "var(--sub)", borderRadius: 8, padding: "6px 13px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: act ? 600 : 400 }}>{label}</button>
@@ -296,19 +299,30 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   return (
     <div>
       {/* Filtres + bouton ajouter */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 5, flex: 1, flexWrap: "wrap" }}>
-          {[{ id: "all", l: "Tous" }, ...aBiz.map(b => ({ id: b.id, l: b.name }))].map(f => (
-            <FBtn key={f.id} id={f.id} label={f.l} act={filterBiz === f.id} onClick={() => setFilterBiz(f.id)} />
-          ))}
-          {aBiz.length > 0 && <>
-            <span style={{ color: "var(--brd)", alignSelf: "center" }}>|</span>
-            {[{ id: "all", l: "Tous types" }, ...CATS].map(f => (
-              <FBtn key={f.id} id={f.id} label={f.l || "Tous types"} act={filterCat === f.id} onClick={() => setFilterCat(f.id)} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 5, flex: 1, flexWrap: "wrap" }}>
+            {[{ id: "all", l: "Tous" }, ...aBiz.map(b => ({ id: b.id, l: b.name }))].map(f => (
+              <FBtn key={f.id} id={f.id} label={f.l} act={filterBiz === f.id} onClick={() => setFilterBiz(f.id)} />
             ))}
-          </>}
+          </div>
+          {aBiz.length > 0 && <Btn variant="pri" onClick={openAdd}>+ Ajouter</Btn>}
         </div>
-        {aBiz.length > 0 && <Btn variant="pri" onClick={openAdd}>+ Ajouter</Btn>}
+        {aBiz.length > 0 && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {[{ id: "all", l: "Tous types" }, ...CATS].map(f => (
+                <FBtn key={f.id} id={f.id} label={f.l || "Tous types"} act={filterCat === f.id} onClick={() => setFilterCat(f.id)} />
+              ))}
+            </div>
+            <input
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              placeholder="Rechercher un produit…"
+              style={{ flex: 1, minWidth: 180, maxWidth: 280 }}
+            />
+          </div>
+        )}
       </div>
 
       {aBiz.length === 0 ? (

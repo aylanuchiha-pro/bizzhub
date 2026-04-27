@@ -240,7 +240,11 @@ export default function App() {
           </div>
         </div>
         <div className="pg" style={{ flex: 1, padding: "22px 24px", overflowY: "auto" }}>
-          {views[tab]}
+          {Object.entries(views).map(([id, view]) => (
+            <div key={id} style={{ display: tab === id ? "block" : "none" }}>
+              {view}
+            </div>
+          ))}
         </div>
       </div>
       <MobileNav
