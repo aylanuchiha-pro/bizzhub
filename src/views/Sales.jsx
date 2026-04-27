@@ -5,7 +5,7 @@ import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview } from "../compo
 
 const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", withPartner: false, partnerId: "", sharePct: "50" };
 
-export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA }) {
+export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, expenses }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptySale);
   const [filterBiz, setFilterBiz] = useState("all");
@@ -23,11 +23,16 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA }
   const pN_ = id => aPartners.find(p => p.id === id)?.name ?? "—";
   const bizProds = active(prods).filter(p => p.bizId === form.bizId);
 
+  const totalCostFor = p => {
+    const extra = (expenses || []).filter(e => e.productId === p.id).reduce((a, e) => a + e.amount, 0);
+    return p.buyPrice + extra;
+  };
+
   const handleProd = id => {
     set("productId", id);
     if (!id) return;
     const p = active(prods).find(x => x.id === id);
-    if (p) { set("name", p.name); set("sellPrice", String(p.sellPrice)); set("costPrice", String(p.buyPrice)); }
+    if (p) { set("name", p.name); set("sellPrice", String(p.sellPrice)); set("costPrice", String(totalCostFor(p))); }
   };
   const handleBiz = id => { set("bizId", id); set("productId", ""); set("name", ""); set("sellPrice", ""); set("costPrice", ""); };
 
@@ -97,6 +102,12 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA }
         </F>
         <F label="Coût / Prix d'achat (€)">
           <input type="number" value={form.costPrice} onChange={e => set("costPrice", e.target.value)} placeholder="0.00" />
+          {form.productId && (() => {
+            const p = active(prods).find(x => x.id === form.productId);
+            if (!p) return null;
+            const extra = (expenses || []).filter(e => e.productId === p.id).reduce((a, e) => a + e.amount, 0);
+            return extra > 0 ? <p style={{ fontSize: 11, color: "var(--warn)", marginTop: 4 }}>Dont {euro(extra)} de frais additionnels inclus</p> : null;
+          })()}
         </F>
         <F label="Quantité"><input type="number" value={form.qty} onChange={e => set("qty", e.target.value)} min="1" /></F>
         <F label="Date"><input type="date" value={form.date} onChange={e => set("date", e.target.value)} /></F>

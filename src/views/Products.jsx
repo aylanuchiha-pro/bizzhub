@@ -236,6 +236,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   const [filterCat, setFilterCat] = useState("all");
   const [editStock, setEditStock] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [confirm, setConfirm] = useState(null);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
@@ -474,7 +475,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                         <Btn variant="success" onClick={() => setSellModal(p)} full>Vendre</Btn>
                         <Btn variant="warn" onClick={() => setExpModal(p)} full>Frais{ec > 0 ? ` (${ec})` : ""}</Btn>
                         <Btn variant="ghost" onClick={() => openEditMobile(p)} full>Éditer</Btn>
-                        <Btn variant="err" onClick={() => { prodA.softDel(p.id); setExpandedId(null); }} full>Supprimer</Btn>
+                        <Btn variant="err" onClick={() => setConfirm({ msg: `Supprimer "${p.name}" ?`, sub: "Il sera déplacé dans la corbeille pendant 30 jours.", onOk: () => { prodA.softDel(p.id); setExpandedId(null); setConfirm(null); } })} full>Supprimer</Btn>
                       </div>
                     </>
                   )}
@@ -487,6 +488,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
       )}
 
       {/* ── Modals ── */}
+      {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
       {sellModal && <SellModal product={sellModal} totalCost={totalCost(sellModal)} onConfirm={d => handleSell(sellModal, d)} onClose={() => setSellModal(null)} />}
       {expModal && <ExpensesModal product={expModal} expenses={expenses || []} onAdd={expenseA.add} onDel={expenseA.hardDel} onClose={() => setExpModal(null)} />}
       {modifyModal && <ModifyModal product={modifyModal} aBiz={aBiz} expenses={expenses || []} expenseA={expenseA} prodA={prodA} onClose={() => setModifyModal(null)} />}
@@ -514,6 +516,21 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
               <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
             </>}
             <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <Lbl>Photo</Lbl>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              {form.image && (
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <img src={form.image} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
+                  <button onClick={() => set("image", null)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--err)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                </div>
+              )}
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)" }}>
+                <span>📷</span><span>{form.image ? "Changer" : "Ajouter une photo"}</span>
+                <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { const b64 = await compressImg(f); set("image", b64); } e.target.value = ""; }} />
+              </label>
+            </div>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
             <Btn onClick={() => setProdModal(null)}>Annuler</Btn>

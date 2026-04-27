@@ -88,7 +88,7 @@ export const ChartTip = ({ active, payload, label }) => {
 };
 
 export const Confirm = ({ msg, sub, onOk, onCancel }) => (
-  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 20px" }}>
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 20px" }}>
     <div style={{ background: "var(--w)", borderRadius: 14, padding: 28, maxWidth: 380, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
       <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Confirmer la suppression</p>
       <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: sub ? 4 : 22 }}>{msg}</p>
@@ -102,7 +102,7 @@ export const Confirm = ({ msg, sub, onOk, onCancel }) => (
 );
 
 export const Modal = ({ title, onClose, children, width = 520 }) => (
-  <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 400, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.48)", zIndex: 400, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
     <div style={{ background: "var(--w)", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,.25)", width: "100%", maxWidth: width, maxHeight: "82vh", overflowY: "auto", margin: "auto" }}>
       <div style={{ padding: "16px 22px", borderBottom: "1px solid var(--brd)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--w)", zIndex: 1 }}>
         <p style={{ fontSize: 15, fontWeight: 700 }}>{title}</p>
