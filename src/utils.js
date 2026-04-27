@@ -13,6 +13,7 @@ export const LOW = 5;
 export const PALETTE = ["#4f46e5", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#06b6d4"];
 export const CATS = [{ id: "physical", l: "Produit physique" }, { id: "service", l: "Service" }, { id: "digital", l: "Produit digital" }];
 export const UNITS = ["unité(s)", "heure(s)", "licence(s)", "exemplaire(s)", "lot(s)", "kg", "litre(s)"];
+export const SIZES = ["S", "M", "L", "XL", "XXL"];
 export const CYCLES = [{ id: "monthly", l: "Mensuel" }, { id: "annual", l: "Annuel" }, { id: "weekly", l: "Hebdo" }];
 export const BOOKING_STATUS = [
   { id: "confirmee", l: "Confirmée" },
@@ -53,8 +54,8 @@ export const M = {
     to: (o, uid) => ({ id: o.id, user_id: uid, name: o.name, color: o.color, deleted_at: iso(o.deletedAt) }),
   },
   prod: {
-    from: r => ({ id: r.id, bizId: r.biz_id, name: r.name, category: r.category, buyPrice: r.buy_price, sellPrice: r.sell_price, stock: r.stock, unit: r.unit, description: r.description || "", image: r.image || null, deletedAt: dt(r.deleted_at) }),
-    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, name: o.name, category: o.category, buy_price: o.buyPrice, sell_price: o.sellPrice, stock: o.stock, unit: o.unit, description: o.description, image: o.image, deleted_at: iso(o.deletedAt) }),
+    from: r => ({ id: r.id, bizId: r.biz_id, name: r.name, category: r.category, buyPrice: r.buy_price, sellPrice: r.sell_price, stock: r.stock, unit: r.unit, description: r.description || "", image: r.image || null, size: r.size || "", deletedAt: dt(r.deleted_at) }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, name: o.name, category: o.category, buy_price: o.buyPrice, sell_price: o.sellPrice, stock: o.stock, unit: o.unit, description: o.description, image: o.image, size: o.size || null, deleted_at: iso(o.deletedAt) }),
   },
   sale: {
     from: r => ({ id: r.id, bizId: r.biz_id, productId: r.product_id, name: r.name, qty: r.qty, sellPrice: r.sell_price, costPrice: r.cost_price, date: r.sale_date, notes: r.notes || "", deletedAt: dt(r.deleted_at) }),

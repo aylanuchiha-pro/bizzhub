@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { uid, today, fmtDate, active, CATS, UNITS, LOW, compressImg, pct } from "../utils";
+import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, compressImg, pct } from "../utils";
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
 
-const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null };
+const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "" };
 
 // ─── Modal vente ──────────────────────────────────────────────────────
 const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
@@ -151,6 +151,12 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
           {form.category === "physical" && <>
             <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
             <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
+            <F label="Taille (vêtement)">
+              <select value={form.size} onChange={e => set("size", e.target.value)}>
+                <option value="">— Sans taille —</option>
+                {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </F>
           </>}
           <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
           <div style={{ gridColumn: "1/-1" }}>
@@ -363,6 +369,12 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                                     <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Type</p>
                                     <CatBdg id={p.category} />
                                   </div>
+                                  {p.size && (
+                                    <div>
+                                      <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Taille</p>
+                                      <span style={{ fontWeight: 700, fontSize: 13, padding: "2px 10px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 6, color: "var(--ac)" }}>{p.size}</span>
+                                    </div>
+                                  )}
                                   <div>
                                     <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Coût réel</p>
                                     <p style={{ fontWeight: 600, fontSize: 13, color: "var(--sub)" }}>
@@ -430,9 +442,10 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, color: "var(--txt)" }}>{p.name}</p>
-                      <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
                         <Bdg label={bN(p.bizId)} color={bC(p.bizId)} sm />
                         <CatBdg id={p.category} />
+                        {p.size && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{p.size}</span>}
                         {p.category === "physical" && <span style={{ fontSize: 10, color: isLow ? "var(--warn)" : "var(--mut)", fontWeight: isLow ? 600 : 400 }}>stock : {p.stock}</span>}
                       </div>
                     </div>
@@ -514,6 +527,12 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
             {form.category === "physical" && <>
               <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
               <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
+              <F label="Taille (vêtement)">
+                <select value={form.size} onChange={e => set("size", e.target.value)}>
+                  <option value="">— Sans taille —</option>
+                  {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </F>
             </>}
             <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
           </div>
