@@ -16,41 +16,41 @@ import Trash from "./views/Trash";
 // ─── Generic Supabase action factory ─────────────────────────────
 // BUG FIX : mapper.to(item, null) envoyait user_id:null → rejeté par RLS.
 // Maintenant userId est passé explicitement à la factory.
-const mkActions = (table, mapper, state, setState, userId) => ({
+const mkActions = (table, mapper, state, setState, userId, onError) => ({
   add: async item => {
     setState(s => [...s, item]);
     const row = mapper.to(item, userId);
     const { error } = await supabase.from(table).insert(row);
-    if (error) console.error(`[${table}] add:`, error.message, JSON.stringify(row));
+    if (error) { console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement. Vérifiez votre connexion."); }
   },
   update: async item => {
     setState(s => s.map(x => x.id === item.id ? item : x));
     const { error } = await supabase.from(table).upsert(mapper.to(item, userId));
-    if (error) console.error(`[${table}] update:`, error.message);
+    if (error) { console.error(`[${table}] update:`, error.message); onError?.("Erreur lors de la mise à jour. Vérifiez votre connexion."); }
   },
   softDel: async id => {
     const now = Date.now();
     setState(s => s.map(x => x.id === id ? { ...x, deletedAt: now } : x));
     const { error } = await supabase.from(table).update({ deleted_at: new Date(now).toISOString() }).eq("id", id);
-    if (error) console.error(`[${table}] softDel:`, error.message);
+    if (error) { console.error(`[${table}] softDel:`, error.message); onError?.("Erreur lors de la suppression."); }
   },
   restore: async id => {
     setState(s => s.map(x => x.id === id ? { ...x, deletedAt: null } : x));
     const { error } = await supabase.from(table).update({ deleted_at: null }).eq("id", id);
-    if (error) console.error(`[${table}] restore:`, error.message);
+    if (error) { console.error(`[${table}] restore:`, error.message); onError?.("Erreur lors de la restauration."); }
   },
   hardDel: async id => {
     setState(s => s.filter(x => x.id !== id));
     const { error } = await supabase.from(table).delete().eq("id", id);
-    if (error) console.error(`[${table}] hardDel:`, error.message);
+    if (error) { console.error(`[${table}] hardDel:`, error.message); onError?.("Erreur lors de la suppression définitive."); }
   },
 });
 
-const mkPaymentActions = (setState, userId) => ({
+const mkPaymentActions = (setState, userId, onError) => ({
   add: async item => {
     setState(s => [...s, item]);
     const { error } = await supabase.from("partner_payments").insert(M.payment.to(item, userId));
-    if (error) console.error("[partner_payments] add:", error.message);
+    if (error) { console.error("[partner_payments] add:", error.message); onError?.("Erreur lors de l'enregistrement du paiement."); }
   },
   hardDel: async id => {
     setState(s => s.filter(x => x.id !== id));
@@ -76,6 +76,7 @@ export default function App() {
   const [dark, setDark] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [toast, setToast] = useState(null);
 
   const [biz, setBiz] = useState([]);
   const [prods, setProds] = useState([]);
@@ -142,21 +143,26 @@ export default function App() {
 
   const userId = session?.user?.id;
 
-  const bizA     = mkActions("businesses",     M.biz,     biz,            setBiz,            userId);
-  const prodA    = mkActions("products",        M.prod,    prods,          setProds,          userId);
-  const saleA    = mkActions("sales",           M.sale,    sales,          setSales,          userId);
-  const assetA   = mkActions("rental_assets",   M.asset,   rentalAssets,   setRentalAssets,   userId);
-  const bookingA = mkActions("rental_bookings", M.booking, rentalBookings, setRentalBookings, userId);
-  const partnerA = mkActions("partners",        M.partner, partners,       setPartners,       userId);
-  const spA      = mkActions("sale_partners",   M.sp,      salePartners,   setSalePartners,   userId);
-  const subA     = mkActions("subscriptions",   M.sub,     subs,           setSubs,           userId);
-  const paymentA = mkPaymentActions(setPayments, userId);
+  const showError = msg => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 5000);
+  };
+
+  const bizA     = mkActions("businesses",     M.biz,     biz,            setBiz,            userId, showError);
+  const prodA    = mkActions("products",        M.prod,    prods,          setProds,          userId, showError);
+  const saleA    = mkActions("sales",           M.sale,    sales,          setSales,          userId, showError);
+  const assetA   = mkActions("rental_assets",   M.asset,   rentalAssets,   setRentalAssets,   userId, showError);
+  const bookingA = mkActions("rental_bookings", M.booking, rentalBookings, setRentalBookings, userId, showError);
+  const partnerA = mkActions("partners",        M.partner, partners,       setPartners,       userId, showError);
+  const spA      = mkActions("sale_partners",   M.sp,      salePartners,   setSalePartners,   userId, showError);
+  const subA     = mkActions("subscriptions",   M.sub,     subs,           setSubs,           userId, showError);
+  const paymentA = mkPaymentActions(setPayments, userId, showError);
 
   const expenseA = {
     add: async item => {
       setExpenses(s => [...s, item]);
       const { error } = await supabase.from("product_expenses").insert(M.expense.to(item, userId));
-      if (error) console.error("[product_expenses] add:", error.message);
+      if (error) { console.error("[product_expenses] add:", error.message); showError("Erreur lors de l'enregistrement du frais."); }
     },
     hardDel: async id => {
       setExpenses(s => s.filter(x => x.id !== id));
@@ -171,11 +177,13 @@ export default function App() {
     setProds(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
     setSales(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
     setRentalAssets(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
+    setSubs(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
     await Promise.all([
       supabase.from("businesses").update({ deleted_at: ts }).eq("id", id),
       supabase.from("products").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
       supabase.from("sales").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
       supabase.from("rental_assets").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
+      supabase.from("subscriptions").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
     ]);
   };
 
@@ -255,6 +263,12 @@ export default function App() {
         dark={dark} onToggleDark={toggleDark}
         onLogout={logout} trashCount={trashCount}
       />
+      {toast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: "#dc2626", color: "#fff", padding: "12px 18px", borderRadius: 10, fontSize: 13, fontWeight: 500, zIndex: 9999, display: "flex", alignItems: "center", gap: 14, boxShadow: "0 4px 24px rgba(0,0,0,.25)", whiteSpace: "nowrap" }}>
+          <span>⚠ {toast}</span>
+          <button onClick={() => setToast(null)} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+        </div>
+      )}
     </div>
   );
 }

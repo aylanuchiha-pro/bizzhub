@@ -14,6 +14,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   const [confirm, setConfirm] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [searchQ, setSearchQ] = useState("");
+  const [filterPeriod, setFilterPeriod] = useState("all");
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -84,9 +85,19 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
 
   const aSales = active(sales);
   const sq = searchQ.trim().toLowerCase();
+  const getPeriodFrom = p => {
+    if (p === "all") return null;
+    const d = new Date();
+    if (p === "week") d.setDate(d.getDate() - 6);
+    else if (p === "month") { d.setDate(1); }
+    else if (p === "year") { d.setMonth(0); d.setDate(1); }
+    return d.toISOString().split("T")[0];
+  };
+  const periodFrom = getPeriodFrom(filterPeriod);
   const filtered = [...aSales]
     .filter(s => filterBiz === "all" || s.bizId === filterBiz)
     .filter(s => !sq || s.name.toLowerCase().includes(sq) || (s.notes || "").toLowerCase().includes(sq))
+    .filter(s => !periodFrom || s.date >= periodFrom)
     .sort((a, b) => b.date.localeCompare(a.date));
   const totCa = filtered.reduce((a, s) => a + s.sellPrice * s.qty, 0);
   const totP = filtered.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
@@ -193,12 +204,20 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
           </div>
           <Btn variant="pri" onClick={() => setShowForm(v => !v)}>{showForm ? "↑ Masquer" : "+ Nouvelle vente"}</Btn>
         </div>
-        <input
-          value={searchQ}
-          onChange={e => setSearchQ(e.target.value)}
-          placeholder="Rechercher une vente…"
-          style={{ maxWidth: 320 }}
-        />
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            placeholder="Rechercher une vente…"
+            style={{ flex: 1, minWidth: 160, maxWidth: 280 }}
+          />
+          <select value={filterPeriod} onChange={e => setFilterPeriod(e.target.value)} style={{ width: "auto" }}>
+            <option value="all">Toutes les périodes</option>
+            <option value="week">7 derniers jours</option>
+            <option value="month">Ce mois-ci</option>
+            <option value="year">Cette année</option>
+          </select>
+        </div>
       </div>
 
       {showForm && <FormBlock />}

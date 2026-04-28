@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { euro, pct, active, MO, cycleMonthly, diffDays } from "../utils";
+import { euro, pct, active, MO, cycleMonthly, diffDays, LOW, SIZES } from "../utils";
 import { KPI, Card, Empty, Bdg, ChartTip } from "../components/ui";
 
 export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBookings, subs }) {
@@ -63,7 +63,12 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
       };
     });
 
-    const lowStock = aProds.filter(p => p.category === "physical" && p.stock <= 5);
+    const szStock = p => p.sizes && SIZES.some(s => (p.sizes[s] || 0) > 0)
+      ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0)
+      : (p.stock || 0);
+    const lowStock = aProds
+      .filter(p => p.category === "physical" && szStock(p) <= LOW)
+      .map(p => ({ ...p, _stock: szStock(p) }));
     return { totalCa, totalProfit, netProfit, monthlyCharges, count: aSales.length, prodCount: aProds.length, byBiz, monthly, lowStock };
   }, [aSales, aBookings, aAssets, aProds, aBiz, aSubs]);
 
@@ -151,7 +156,7 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
                 <p style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
                 <p style={{ fontSize: 11, color: "var(--mut)" }}>{bizName(p.bizId)}</p>
               </div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: p.stock === 0 ? "var(--err)" : "var(--warn)", flexShrink: 0, marginLeft: 8 }}>{p.stock} {p.unit}</p>
+              <p style={{ fontSize: 13, fontWeight: 600, color: p._stock === 0 ? "var(--err)" : "var(--warn)", flexShrink: 0, marginLeft: 8 }}>{p._stock} {p.unit}</p>
             </div>
           ))}
         </Card>
