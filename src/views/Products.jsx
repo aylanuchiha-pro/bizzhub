@@ -390,11 +390,11 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     <div>
       {/* Filtres + bouton ajouter */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-        <select value={filterBiz} onChange={e => setFilterBiz(e.target.value)} style={{ flex: "0 0 auto" }}>
+        <select value={filterBiz} onChange={e => setFilterBiz(e.target.value)} style={{ width: "auto", minWidth: 120, maxWidth: 180 }}>
           <option value="all">Toutes les activités</option>
           {aBiz.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
-        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ flex: "0 0 auto" }}>
+        <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ width: "auto", minWidth: 120, maxWidth: 160 }}>
           <option value="all">Tous les types</option>
           {CATS.map(c => <option key={c.id} value={c.id}>{c.l}</option>)}
         </select>
