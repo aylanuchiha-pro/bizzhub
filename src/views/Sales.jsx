@@ -47,6 +47,10 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
     if (!form.bizId) e.bizId = true;
     if (!form.name.trim()) e.name = true;
     if (!form.sellPrice || isNaN(parseFloat(form.sellPrice))) e.sellPrice = true;
+    if (form.productId) {
+      const selProd = active(prods).find(p => p.id === form.productId);
+      if (selProd?.sizes && SIZES.some(s => (selProd.sizes[s] || 0) > 0) && !form.size) e.size = true;
+    }
     setErrors(e);
     if (Object.keys(e).length) return;
 
