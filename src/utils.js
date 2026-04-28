@@ -54,12 +54,12 @@ export const M = {
     to: (o, uid) => ({ id: o.id, user_id: uid, name: o.name, color: o.color, deleted_at: iso(o.deletedAt) }),
   },
   prod: {
-    from: r => ({ id: r.id, bizId: r.biz_id, name: r.name, category: r.category, buyPrice: r.buy_price, sellPrice: r.sell_price, stock: r.stock, unit: r.unit, description: r.description || "", image: r.image || null, size: r.size || "", deletedAt: dt(r.deleted_at) }),
-    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, name: o.name, category: o.category, buy_price: o.buyPrice, sell_price: o.sellPrice, stock: o.stock, unit: o.unit, description: o.description, image: o.image, size: o.size || null, deleted_at: iso(o.deletedAt) }),
+    from: r => ({ id: r.id, bizId: r.biz_id, name: r.name, category: r.category, buyPrice: r.buy_price, sellPrice: r.sell_price, stock: r.stock, unit: r.unit, description: r.description || "", image: r.image || null, size: r.size || "", sizes: r.sizes || null, deletedAt: dt(r.deleted_at) }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, name: o.name, category: o.category, buy_price: o.buyPrice, sell_price: o.sellPrice, stock: o.stock, unit: o.unit, description: o.description, image: o.image, size: o.sizes ? null : (o.size || null), sizes: o.sizes || null, deleted_at: iso(o.deletedAt) }),
   },
   sale: {
-    from: r => ({ id: r.id, bizId: r.biz_id, productId: r.product_id, name: r.name, qty: r.qty, sellPrice: r.sell_price, costPrice: r.cost_price, date: r.sale_date, notes: r.notes || "", deletedAt: dt(r.deleted_at) }),
-    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, product_id: o.productId || null, name: o.name, qty: o.qty, sell_price: o.sellPrice, cost_price: o.costPrice, sale_date: o.date, notes: o.notes, deleted_at: iso(o.deletedAt) }),
+    from: r => ({ id: r.id, bizId: r.biz_id, productId: r.product_id, name: r.name, qty: r.qty, sellPrice: r.sell_price, costPrice: r.cost_price, date: r.sale_date, notes: r.notes || "", size: r.size || null, deletedAt: dt(r.deleted_at) }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId, product_id: o.productId || null, name: o.name, qty: o.qty, sell_price: o.sellPrice, cost_price: o.costPrice, sale_date: o.date, notes: o.notes, size: o.size || null, deleted_at: iso(o.deletedAt) }),
   },
   // Rental asset = véhicule / bien loué (coût mensuel fixe)
   asset: {

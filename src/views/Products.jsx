@@ -3,23 +3,98 @@ import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, compressImg, pct 
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
 
-const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "" };
+const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "", sizes: null };
 
-// ─── Modal vente ──────────────────────────────────────────────────────
+const hasSizes = p => p.sizes && typeof p.sizes === "object" && SIZES.some(s => (p.sizes[s] || 0) > 0);
+const totalSzStock = p => hasSizes(p) ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0) : (p.stock || 0);
+
+// ─── Sélecteur de tailles dans un formulaire ──────────────────────
+const SizesGrid = ({ sizes, onChange }) => (
+  <div style={{ gridColumn: "1/-1" }}>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
+      {SIZES.map(s => (
+        <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--ac)", letterSpacing: ".04em" }}>{s}</label>
+          <input
+            type="number"
+            min="0"
+            value={sizes[s] ?? 0}
+            onChange={e => onChange({ ...sizes, [s]: Math.max(0, parseInt(e.target.value) || 0) })}
+            style={{ width: 58, textAlign: "center", padding: "6px 4px" }}
+          />
+        </div>
+      ))}
+    </div>
+    <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 8 }}>
+      Total : <strong style={{ color: "var(--ac)" }}>{SIZES.reduce((a, s) => a + (sizes[s] || 0), 0)}</strong>
+    </p>
+  </div>
+);
+
+// ─── Toggle mode tailles dans formulaire ─────────────────────────
+const SizesToggle = ({ form, set, setForm }) => {
+  const enabled = !!form.sizes;
+  return (
+    <div style={{ gridColumn: "1/-1" }}>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={e => {
+            if (e.target.checked) {
+              const initSizes = Object.fromEntries(SIZES.map(s => [s, s === form.size && form.size ? parseInt(form.stock) || 0 : 0]));
+              setForm(f => ({ ...f, sizes: initSizes, size: "" }));
+            } else {
+              const total = SIZES.reduce((a, s) => a + (form.sizes?.[s] || 0), 0);
+              setForm(f => ({ ...f, sizes: null, stock: String(total) }));
+            }
+          }}
+          style={{ width: 15, height: 15, cursor: "pointer" }}
+        />
+        <span style={{ color: enabled ? "var(--ac)" : "var(--sub)", fontWeight: enabled ? 600 : 400 }}>
+          Gérer le stock par taille (S / M / L…)
+        </span>
+      </label>
+    </div>
+  );
+};
+
+// ─── Affichage badges tailles ─────────────────────────────────────
+const SizesBadges = ({ p }) => {
+  if (hasSizes(p)) {
+    return SIZES.filter(s => (p.sizes[s] || 0) > 0).map(s => (
+      <span key={s} style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>
+        {s}:{p.sizes[s]}
+      </span>
+    ));
+  }
+  if (p.size) {
+    return <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{p.size}</span>;
+  }
+  return null;
+};
+
+// ─── Modal vente ──────────────────────────────────────────────────
 const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
+  const hasSz = hasSizes(product);
+  const availSizes = hasSz ? SIZES.filter(s => (product.sizes[s] || 0) > 0) : [];
   const [qty, setQty] = useState("1");
   const [price, setPrice] = useState(String(product.sellPrice));
   const [date, setDate] = useState(today());
   const [notes, setNotes] = useState("");
+  const [selSize, setSelSize] = useState(availSizes[0] || "");
   const qN = Math.max(1, parseInt(qty) || 1);
   const pN = parseFloat(price) || 0;
   const profit = (pN - totalCost) * qN;
-  const over = product.category === "physical" && qN > product.stock;
+  const sizeStock = hasSz && selSize ? (product.sizes[selSize] || 0) : product.stock;
+  const over = product.category === "physical" && qN > sizeStock;
   return (
     <Modal title={`Vendre — ${product.name}`} onClose={onClose} width={420}>
       {product.category === "physical" && (
         <div style={{ padding: "10px 14px", background: "var(--surf)", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid var(--brd)" }}>
-          Stock disponible : <strong style={{ color: product.stock <= LOW ? "var(--warn)" : "var(--ok)" }}>{product.stock} {product.unit}</strong>
+          Stock disponible : <strong style={{ color: sizeStock <= LOW ? "var(--warn)" : "var(--ok)" }}>
+            {sizeStock} {product.unit}{hasSz && selSize ? ` (taille ${selSize})` : ""}
+          </strong>
         </div>
       )}
       {totalCost > product.buyPrice && (
@@ -28,6 +103,13 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
         </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {hasSz && availSizes.length > 0 && (
+          <F label="Taille">
+            <select value={selSize} onChange={e => { setSelSize(e.target.value); setQty("1"); }}>
+              {availSizes.map(s => <option key={s} value={s}>{s} — stock : {product.sizes[s]}</option>)}
+            </select>
+          </F>
+        )}
         <F label="Quantité"><input type="number" value={qty} min="1" onChange={e => setQty(e.target.value)} /></F>
         {over && <p style={{ fontSize: 11, color: "var(--err)", marginTop: -10 }}>⚠ Stock insuffisant</p>}
         <F label="Prix de vente unitaire (€)"><input type="number" value={price} onChange={e => setPrice(e.target.value)} /></F>
@@ -36,14 +118,14 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
         {pN > 0 && <Preview ca={pN * qN} profit={profit} margin={pct(profit, pN * qN)} />}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Btn onClick={onClose}>Annuler</Btn>
-          <Btn variant="pri" onClick={() => !over && onConfirm({ qty: qN, sellPrice: pN, date, notes })} disabled={over || pN <= 0}>Enregistrer</Btn>
+          <Btn variant="pri" onClick={() => !over && onConfirm({ qty: qN, sellPrice: pN, date, notes, size: hasSz ? selSize : null })} disabled={over || pN <= 0}>Enregistrer</Btn>
         </div>
       </div>
     </Modal>
   );
 };
 
-// ─── Modal frais (mobile) ─────────────────────────────────────────────
+// ─── Modal frais (mobile) ─────────────────────────────────────────
 const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
@@ -95,7 +177,7 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
 
 // ─── Modal Modifier (desktop) — infos + frais + suppression ──────────
 const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
-  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock) });
+  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null });
   const [confirmDel, setConfirmDel] = useState(false);
   const [expLabel, setExpLabel] = useState("");
   const [expAmount, setExpAmount] = useState("");
@@ -109,7 +191,10 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
 
   const save = () => {
     if (!form.name.trim() || !form.bizId) return;
-    prodA.update({ ...form, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: parseInt(form.stock) || 0 });
+    const computedStock = form.sizes
+      ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0)
+      : parseInt(form.stock) || 0;
+    prodA.update({ ...form, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null });
     onClose();
   };
 
@@ -149,14 +234,14 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
           <F label="Prix d'achat / Coût de base (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} placeholder="0.00" /></F>
           <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} placeholder="0.00" /></F>
           {form.category === "physical" && <>
-            <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
-            <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
-            <F label="Taille (vêtement)">
-              <select value={form.size} onChange={e => set("size", e.target.value)}>
-                <option value="">— Sans taille —</option>
-                {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </F>
+            {!form.sizes && (
+              <>
+                <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
+                <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
+              </>
+            )}
+            <SizesToggle form={form} set={set} setForm={setForm} />
+            {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
           </>}
           <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
           <div style={{ gridColumn: "1/-1" }}>
@@ -257,15 +342,16 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   };
   const expCount = p => (expenses || []).filter(e => e.productId === p.id).length;
 
-  // Bouton "Ajouter" (crée un nouveau produit)
   const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setProdModal("add"); };
 
-  // Mobile "Éditer" — réutilise le même formulaire léger
-  const openEditMobile = p => { setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock) }); setProdModal(p); };
+  const openEditMobile = p => { setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null }); setProdModal(p); };
 
   const saveProd = () => {
     if (!form.name.trim() || !form.bizId) return;
-    const prod = { ...form, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: parseInt(form.stock) || 0, deletedAt: null };
+    const computedStock = form.sizes
+      ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0)
+      : parseInt(form.stock) || 0;
+    const prod = { ...form, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null, deletedAt: null };
     if (typeof prodModal === "string") prodA.add(prod);
     else prodA.update(prod);
     setProdModal(null);
@@ -278,9 +364,17 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     setEditStock(null);
   };
 
-  const handleSell = (product, { qty, sellPrice, date, notes }) => {
-    if (product.category === "physical") prodA.update({ ...product, stock: Math.max(0, product.stock - qty) });
-    saleA.add({ id: uid(), bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: totalCost(product), date, notes, deletedAt: null });
+  const handleSell = (product, { qty, sellPrice, date, notes, size }) => {
+    if (product.category === "physical") {
+      if (hasSizes(product) && size) {
+        const newSizes = { ...product.sizes, [size]: Math.max(0, (product.sizes[size] || 0) - qty) };
+        const newStock = SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0);
+        prodA.update({ ...product, sizes: newSizes, stock: newStock });
+      } else {
+        prodA.update({ ...product, stock: Math.max(0, product.stock - qty) });
+      }
+    }
+    saleA.add({ id: uid(), bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: totalCost(product), date, notes, size: hasSizes(product) ? size : null, deletedAt: null });
     setSellModal(null);
   };
 
@@ -342,7 +436,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                     const ec = expCount(p);
                     const margin = p.sellPrice - tc;
                     const mPct = p.sellPrice ? ((margin / p.sellPrice) * 100).toFixed(0) + "%" : "—";
-                    const isLow = p.category === "physical" && p.stock <= LOW;
+                    const stockTotal = totalSzStock(p);
+                    const isLow = p.category === "physical" && stockTotal <= LOW;
                     const expanded = expandedId === p.id;
                     return (
                       <>
@@ -376,19 +471,31 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                         {expanded && (
                           <tr key={p.id + "-x"} style={{ background: "var(--surf)", borderTop: "1px solid var(--brd)" }}>
                             <td colSpan={6} style={{ padding: "14px 16px 16px" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
                                 {/* Infos supplémentaires */}
-                                <div style={{ display: "flex", gap: 20 }}>
+                                <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
                                   <div>
                                     <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Type</p>
                                     <CatBdg id={p.category} />
                                   </div>
-                                  {p.size && (
+                                  {/* Tailles ou taille unique */}
+                                  {hasSizes(p) ? (
+                                    <div>
+                                      <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 5 }}>Tailles</p>
+                                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                        {SIZES.filter(s => (p.sizes[s] || 0) > 0).map(s => (
+                                          <span key={s} style={{ fontWeight: 700, fontSize: 12, padding: "3px 9px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 6, color: "var(--ac)" }}>
+                                            {s} : {p.sizes[s]}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : p.size ? (
                                     <div>
                                       <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Taille</p>
                                       <span style={{ fontWeight: 700, fontSize: 13, padding: "2px 10px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 6, color: "var(--ac)" }}>{p.size}</span>
                                     </div>
-                                  )}
+                                  ) : null}
                                   <div>
                                     <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Coût réel</p>
                                     <p style={{ fontWeight: 600, fontSize: 13, color: "var(--sub)" }}>
@@ -399,7 +506,11 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                                   {p.category === "physical" && (
                                     <div>
                                       <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Stock</p>
-                                      {editStock?.id === p.id ? (
+                                      {hasSizes(p) ? (
+                                        <span style={{ fontSize: 13, fontWeight: 700, color: isLow ? "var(--warn)" : "var(--ac)", background: "var(--acb)", border: `1px solid ${isLow ? "rgba(217,119,6,.3)" : "rgba(79,70,229,.2)"}`, borderRadius: 6, padding: "3px 10px" }}>
+                                          {stockTotal} <span style={{ fontWeight: 400, fontSize: 11, color: "var(--mut)" }}>total</span>
+                                        </span>
+                                      ) : editStock?.id === p.id ? (
                                         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
                                           <input type="number" min="0" value={editStock.val}
                                             onChange={e => setEditStock(s => ({ ...s, val: e.target.value }))}
@@ -445,7 +556,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
               const ec = expCount(p);
               const margin = p.sellPrice - tc;
               const mPct = p.sellPrice ? ((margin / p.sellPrice) * 100).toFixed(0) + "%" : "—";
-              const isLow = p.category === "physical" && p.stock <= LOW;
+              const stockTotal = totalSzStock(p);
+              const isLow = p.category === "physical" && stockTotal <= LOW;
               const expanded = expandedId === p.id;
               return (
                 <div key={p.id} style={{ background: "var(--w)", border: `1px solid ${expanded ? "var(--ac)" : "var(--brd)"}`, borderRadius: 14, overflow: "hidden", boxShadow: "var(--sh)", transition: "border-color .15s" }}>
@@ -459,8 +571,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                       <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
                         <Bdg label={bN(p.bizId)} color={bC(p.bizId)} sm />
                         <CatBdg id={p.category} />
-                        {p.size && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{p.size}</span>}
-                        {p.category === "physical" && <span style={{ fontSize: 10, color: isLow ? "var(--warn)" : "var(--mut)", fontWeight: isLow ? 600 : 400 }}>stock : {p.stock}</span>}
+                        <SizesBadges p={p} />
+                        {p.category === "physical" && <span style={{ fontSize: 10, color: isLow ? "var(--warn)" : "var(--mut)", fontWeight: isLow ? 600 : 400 }}>stock : {stockTotal}</span>}
                       </div>
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0, marginRight: 4 }}>
@@ -483,7 +595,16 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                       {p.category === "physical" && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 13px", borderBottom: "1px solid var(--brd)" }}>
                           <span style={{ fontSize: 11, color: "var(--mut)" }}>Stock :</span>
-                          {editStock?.id === p.id ? (
+                          {hasSizes(p) ? (
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", flex: 1 }}>
+                              {SIZES.filter(s => (p.sizes[s] || 0) > 0).map(s => (
+                                <span key={s} style={{ fontSize: 12, fontWeight: 700, color: "var(--ac)", background: "var(--acb)", border: "1px solid rgba(79,70,229,.2)", borderRadius: 6, padding: "3px 9px" }}>
+                                  {s} : {p.sizes[s]}
+                                </span>
+                              ))}
+                              <span style={{ fontSize: 11, color: "var(--mut)", alignSelf: "center" }}>= {stockTotal} total</span>
+                            </div>
+                          ) : editStock?.id === p.id ? (
                             <>
                               <input type="number" min="0" value={editStock.val} onChange={e => setEditStock(s => ({ ...s, val: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") confirmStock(p.id); if (e.key === "Escape") setEditStock(null); }} autoFocus style={{ width: 80, padding: "6px 10px", fontSize: 14, textAlign: "center" }} />
                               <button onClick={() => confirmStock(p.id)} style={{ ...sbtn, color: "var(--ok)", borderColor: "var(--ok)" }}>✓</button>
@@ -539,14 +660,14 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
             <F label="Prix d'achat (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} placeholder="0.00" /></F>
             <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} placeholder="0.00" /></F>
             {form.category === "physical" && <>
-              <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
-              <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
-              <F label="Taille (vêtement)">
-                <select value={form.size} onChange={e => set("size", e.target.value)}>
-                  <option value="">— Sans taille —</option>
-                  {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </F>
+              {!form.sizes && (
+                <>
+                  <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
+                  <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
+                </>
+              )}
+              <SizesToggle form={form} set={set} setForm={setForm} />
+              {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
             </>}
             <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
           </div>

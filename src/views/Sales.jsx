@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { uid, today, fmtDate, active, pct } from "../utils";
+import { uid, today, fmtDate, active, pct, SIZES } from "../utils";
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview } from "../components/ui";
 
-const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", withPartner: false, partnerId: "", sharePct: "50" };
+const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", size: "", withPartner: false, partnerId: "", sharePct: "50" };
 
 export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, expenses }) {
   const [showForm, setShowForm] = useState(false);
@@ -31,11 +31,15 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
 
   const handleProd = id => {
     set("productId", id);
+    set("size", "");
     if (!id) return;
     const p = active(prods).find(x => x.id === id);
-    if (p) { set("name", p.name); set("sellPrice", String(p.sellPrice)); set("costPrice", String(totalCostFor(p))); }
+    if (p) {
+      set("name", p.name); set("sellPrice", String(p.sellPrice)); set("costPrice", String(totalCostFor(p)));
+      if (p.sizes) set("size", SIZES.find(s => (p.sizes[s] || 0) > 0) || "");
+    }
   };
-  const handleBiz = id => { set("bizId", id); set("productId", ""); set("name", ""); set("sellPrice", ""); set("costPrice", ""); };
+  const handleBiz = id => { set("bizId", id); set("productId", ""); set("name", ""); set("sellPrice", ""); set("costPrice", ""); set("size", ""); };
 
   const submit = () => {
     const e = {};
@@ -47,11 +51,18 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
 
     const sN = parseFloat(form.sellPrice), cN = parseFloat(form.costPrice) || 0, qN = parseInt(form.qty) || 1;
     const saleId = uid();
-    saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), deletedAt: null });
+    saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, deletedAt: null });
 
     if (form.productId) {
       const prod = active(prods).find(p => p.id === form.productId);
-      if (prod && prod.category === "physical") prodA.update({ ...prod, stock: Math.max(0, prod.stock - qN) });
+      if (prod && prod.category === "physical") {
+        if (prod.sizes && form.size) {
+          const newSizes = { ...prod.sizes, [form.size]: Math.max(0, (prod.sizes[form.size] || 0) - qN) };
+          prodA.update({ ...prod, sizes: newSizes, stock: SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0) });
+        } else {
+          prodA.update({ ...prod, stock: Math.max(0, prod.stock - qN) });
+        }
+      }
     }
 
     if (form.withPartner && form.partnerId) {
@@ -99,6 +110,20 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
             </select>
           </F>
         )}
+        {form.productId && (() => {
+          const p = active(prods).find(x => x.id === form.productId);
+          if (!p?.sizes) return null;
+          const availSizes = SIZES.filter(s => (p.sizes[s] || 0) > 0);
+          if (availSizes.length === 0) return null;
+          return (
+            <F label="Taille">
+              <select value={form.size} onChange={e => { set("size", e.target.value); setErrors(r => ({ ...r, size: false })); }} style={errors.size ? { borderColor: "var(--err)" } : {}}>
+                <option value="">— Choisir —</option>
+                {availSizes.map(s => <option key={s} value={s}>{s} — stock : {p.sizes[s]}</option>)}
+              </select>
+            </F>
+          );
+        })()}
         <F label="Désignation">
           <input value={form.name} onChange={e => { set("name", e.target.value); setErrors(r => ({ ...r, name: false })); }} placeholder="Nom du produit ou service" style={errors.name ? { borderColor: "var(--err)" } : {}} />
         </F>
@@ -236,6 +261,12 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                                     <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Marge</p>
                                     <p style={{ fontWeight: 600, fontSize: 13, color: profit >= 0 ? "var(--ok)" : "var(--err)" }}>{pct(s.sellPrice - s.costPrice, s.sellPrice)}</p>
                                   </div>
+                                  {s.size && (
+                                    <div>
+                                      <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Taille</p>
+                                      <span style={{ fontWeight: 700, fontSize: 13, padding: "2px 10px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 6, color: "var(--ac)" }}>{s.size}</span>
+                                    </div>
+                                  )}
                                   {s.notes && (
                                     <div>
                                       <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Notes</p>
@@ -302,6 +333,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                         <Bdg label={bN(s.bizId)} color={bC(s.bizId)} sm />
                         <span style={{ fontSize: 11, color: "var(--mut)" }}>{fmtDate(s.date)}</span>
                         {s.qty > 1 && <span style={{ fontSize: 11, color: "var(--sub)" }}>×{s.qty}</span>}
+                        {s.size && <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{s.size}</span>}
                       </div>
                     </div>
                     <p style={{ fontWeight: 700, fontSize: 15, color: profit >= 0 ? "var(--ok)" : "var(--err)", flexShrink: 0, marginRight: 4 }}>{euro(profit)}</p>
