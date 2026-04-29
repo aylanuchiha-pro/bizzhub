@@ -92,12 +92,12 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) loadAll();
+      if (session) loadAll(session);
       else setLoaded(true);
     });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (event === "SIGNED_IN") loadAll();
+      if (event === "SIGNED_IN") loadAll(session);
       if (event === "SIGNED_OUT") {
         setBiz([]); setProds([]); setSales([]);
         setRentalAssets([]); setRentalBookings([]);
@@ -108,22 +108,24 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadAll = async () => {
+  const loadAll = async (userSession) => {
+    const userId = userSession?.user?.id;
+    if (!userId) { setLoaded(true); return; }
     setLoaded(false);
     const now = Date.now();
     const keep = x => !(x.deleted_at && (now - new Date(x.deleted_at).getTime()) >= TRASH_MS);
 
     const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.all([
-      supabase.from("businesses").select("*"),
-      supabase.from("products").select("*"),
-      supabase.from("sales").select("*"),
-      supabase.from("rental_assets").select("*"),
-      supabase.from("rental_bookings").select("*"),
-      supabase.from("partners").select("*"),
-      supabase.from("sale_partners").select("*"),
-      supabase.from("partner_payments").select("*"),
-      supabase.from("subscriptions").select("*"),
-      supabase.from("product_expenses").select("*"),
+      supabase.from("businesses").select("*").eq("user_id", userId),
+      supabase.from("products").select("*").eq("user_id", userId),
+      supabase.from("sales").select("*").eq("user_id", userId),
+      supabase.from("rental_assets").select("*").eq("user_id", userId),
+      supabase.from("rental_bookings").select("*").eq("user_id", userId),
+      supabase.from("partners").select("*").eq("user_id", userId),
+      supabase.from("sale_partners").select("*").eq("user_id", userId),
+      supabase.from("partner_payments").select("*").eq("user_id", userId),
+      supabase.from("subscriptions").select("*").eq("user_id", userId),
+      supabase.from("product_expenses").select("*").eq("user_id", userId),
     ]);
 
     setBiz((b.data || []).filter(keep).map(M.biz.from));
@@ -173,18 +175,23 @@ export default function App() {
   const deleteBiz = async id => {
     const now = Date.now();
     const ts = new Date(now).toISOString();
+    const assetIds = rentalAssets.filter(a => a.bizId === id && !a.deletedAt).map(a => a.id);
     setBiz(s => s.map(x => x.id === id ? { ...x, deletedAt: now } : x));
     setProds(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
     setSales(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
     setRentalAssets(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
+    setRentalBookings(s => s.map(x => assetIds.includes(x.assetId) && !x.deletedAt ? { ...x, deletedAt: now } : x));
     setSubs(s => s.map(x => x.bizId === id && !x.deletedAt ? { ...x, deletedAt: now } : x));
-    await Promise.all([
+    const ops = [
       supabase.from("businesses").update({ deleted_at: ts }).eq("id", id),
       supabase.from("products").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
       supabase.from("sales").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
       supabase.from("rental_assets").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
       supabase.from("subscriptions").update({ deleted_at: ts }).eq("biz_id", id).is("deleted_at", null),
-    ]);
+    ];
+    if (assetIds.length > 0)
+      ops.push(supabase.from("rental_bookings").update({ deleted_at: ts }).in("asset_id", assetIds).is("deleted_at", null));
+    await Promise.all(ops);
   };
 
   const toggleDark = () => {

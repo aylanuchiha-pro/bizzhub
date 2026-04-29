@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { uid, today, fmtDate, active, pct, SIZES } from "../utils";
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview } from "../components/ui";
@@ -243,10 +243,9 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                     const ca = s.sellPrice * s.qty;
                     const expanded = expandedId === s.id;
                     return (
-                      <>
+                      <Fragment key={s.id}>
                         {/* ─ Ligne compacte ─ */}
                         <tr
-                          key={s.id}
                           onClick={() => toggleExpand(s.id)}
                           style={{ borderTop: "1px solid var(--brd)", cursor: "pointer", background: expanded ? "var(--surf)" : undefined, transition: "background .1s" }}
                           onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = "var(--surf)"; }}
@@ -264,7 +263,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
 
                         {/* ─ Ligne dépliée ─ */}
                         {expanded && (
-                          <tr key={s.id + "-x"} style={{ background: "var(--surf)", borderTop: "1px solid var(--brd)" }}>
+                          <tr style={{ background: "var(--surf)", borderTop: "1px solid var(--brd)" }}>
                             <td colSpan={6} style={{ padding: "12px 16px 14px" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
                                 <div style={{ display: "flex", gap: 20 }}>
@@ -305,7 +304,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

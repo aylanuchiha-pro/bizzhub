@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, compressImg, pct } from "../utils";
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
@@ -519,10 +519,9 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                     const isLow = p.category === "physical" && stockTotal <= LOW;
                     const expanded = expandedId === p.id;
                     return (
-                      <>
+                      <Fragment key={p.id}>
                         {/* ─ Ligne compacte ─ */}
                         <tr
-                          key={p.id}
                           onClick={() => toggleExpand(p.id)}
                           style={{ borderTop: "1px solid var(--brd)", cursor: "pointer", background: expanded ? "var(--surf)" : undefined, transition: "background .1s" }}
                           onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = "var(--surf)"; }}
@@ -548,7 +547,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
 
                         {/* ─ Ligne dépliée ─ */}
                         {expanded && (
-                          <tr key={p.id + "-x"} style={{ background: "var(--surf)", borderTop: "1px solid var(--brd)" }}>
+                          <tr style={{ background: "var(--surf)", borderTop: "1px solid var(--brd)" }}>
                             <td colSpan={6} style={{ padding: "14px 16px 16px" }}>
                               <div style={{ display: "flex", alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
                                 {/* Infos supplémentaires */}
@@ -619,7 +618,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

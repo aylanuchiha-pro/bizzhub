@@ -2,7 +2,7 @@ import { useState } from "react";
 import { uid, active, PALETTE } from "../utils";
 import { Btn, Lbl, Card, Empty, Confirm, Divider } from "../components/ui";
 
-export default function Businesses({ biz, bizA, prods, sales, rentals, deleteBiz }) {
+export default function Businesses({ biz, bizA, prods, sales, rentalAssets, deleteBiz }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(PALETTE[0]);
   const [err, setErr] = useState(false);
@@ -18,7 +18,7 @@ export default function Businesses({ biz, bizA, prods, sales, rentals, deleteBiz
   const askDel = b => {
     const pCount = active(prods).filter(p => p.bizId === b.id).length;
     const sCount = active(sales).filter(s => s.bizId === b.id).length;
-    const rCount = active(rentals).filter(r => r.bizId === b.id).length;
+    const rCount = active(rentalAssets).filter(r => r.bizId === b.id).length;
     setConfirm({
       msg: `Supprimer l'activité "${b.name}" ?`,
       sub: `${pCount} produit(s), ${sCount} vente(s) et ${rCount} location(s) associés seront aussi déplacés dans la corbeille.`,
@@ -55,7 +55,7 @@ export default function Businesses({ biz, bizA, prods, sales, rentals, deleteBiz
           {aBiz.map(b => {
             const pCount = active(prods).filter(p => p.bizId === b.id).length;
             const sCount = active(sales).filter(s => s.bizId === b.id).length;
-            const rCount = active(rentals).filter(r => r.bizId === b.id).length;
+            const rCount = active(rentalAssets).filter(r => r.bizId === b.id).length;
             return (
               <Card key={b.id} style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: b.color + "20", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
