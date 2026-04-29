@@ -3,7 +3,87 @@ import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, compressImg, pct 
 import { euro } from "../utils";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
 
-const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "", sizes: null };
+// ─── Constantes véhicule ─────────────────────────────────────────
+const VEHICLE_FUELS = ["Essence", "Diesel", "Hybride", "Électrique", "GPL"];
+const VEHICLE_TRANSMISSIONS = ["Manuelle", "Automatique"];
+const VEHICLE_CONDITIONS = ["Très bon état", "Bon état", "État correct", "À rénover"];
+
+const emptyVehicleFields = { isVehicle: false, vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "" };
+
+// Détecte et parse une description au format véhicule "2010 | 112000 | Essence | …"
+function parseVehicleDesc(desc) {
+  if (!desc || !/^\d{4}\s*\|/.test(desc)) return null;
+  const parts = desc.split("|").map(s => s.trim());
+  return {
+    isVehicle: true,
+    vYear: parts[0] || "",
+    vMileage: parts[1] || "",
+    vFuel: parts[2] || "Essence",
+    vTransmission: parts[3] || "Manuelle",
+    vColor: parts[4] || "",
+    vCondition: parts[5] || "Bon état",
+    vCt: parts[6] || "",
+    vFreeDesc: parts.slice(7).join(" | ").trim(),
+  };
+}
+
+// Encode les champs véhicule vers la description pipe-séparée
+function encodeVehicleDesc(form) {
+  return [form.vYear, form.vMileage, form.vFuel, form.vTransmission, form.vColor, form.vCondition, form.vCt, form.vFreeDesc]
+    .map(v => String(v || "").trim())
+    .join(" | ");
+}
+
+// ─── UI véhicule partagé ─────────────────────────────────────────
+const VehicleToggle = ({ form, set }) => (
+  <div style={{ gridColumn: "1/-1" }}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
+      <input
+        type="checkbox"
+        checked={!!form.isVehicle}
+        onChange={e => set("isVehicle", e.target.checked)}
+        style={{ width: 15, height: 15, cursor: "pointer" }}
+      />
+      <span style={{ color: form.isVehicle ? "var(--ac)" : "var(--sub)", fontWeight: form.isVehicle ? 600 : 400 }}>
+        🚗 C'est un véhicule (Tixycars)
+      </span>
+    </label>
+  </div>
+);
+
+const VehicleFields = ({ form, set }) => (
+  <>
+    <div style={{ gridColumn: "1/-1", padding: "8px 12px", background: "rgba(79,70,229,.06)", border: "1px solid rgba(79,70,229,.2)", borderRadius: 8, fontSize: 12, color: "var(--ac)" }}>
+      Ces champs seront affichés sur le site Tixycars
+    </div>
+    <F label="Année"><input type="number" value={form.vYear} onChange={e => set("vYear", e.target.value)} placeholder="2010" /></F>
+    <F label="Kilométrage (km)"><input type="number" value={form.vMileage} onChange={e => set("vMileage", e.target.value)} placeholder="112000" /></F>
+    <F label="Carburant">
+      <select value={form.vFuel} onChange={e => set("vFuel", e.target.value)}>
+        {VEHICLE_FUELS.map(f => <option key={f}>{f}</option>)}
+      </select>
+    </F>
+    <F label="Boîte">
+      <select value={form.vTransmission} onChange={e => set("vTransmission", e.target.value)}>
+        {VEHICLE_TRANSMISSIONS.map(t => <option key={t}>{t}</option>)}
+      </select>
+    </F>
+    <F label="Couleur"><input value={form.vColor} onChange={e => set("vColor", e.target.value)} placeholder="Rouge, Blanc métallisé…" /></F>
+    <F label="État">
+      <select value={form.vCondition} onChange={e => set("vCondition", e.target.value)}>
+        {VEHICLE_CONDITIONS.map(c => <option key={c}>{c}</option>)}
+      </select>
+    </F>
+    <F label="Contrôle technique" col="1/-1">
+      <input value={form.vCt} onChange={e => set("vCt", e.target.value)} placeholder="Valable 03/2026 · Non fait · À refaire" />
+    </F>
+    <F label="Description (travaux, options…)" col="1/-1">
+      <textarea value={form.vFreeDesc} onChange={e => set("vFreeDesc", e.target.value)} rows={3} style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} placeholder="Révision faite jan 2025, 4 pneus neufs, carnet d'entretien complet…" />
+    </F>
+  </>
+);
+
+const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "", sizes: null, ...emptyVehicleFields };
 
 const hasSizes = p => p.sizes && typeof p.sizes === "object" && SIZES.some(s => (p.sizes[s] || 0) > 0);
 const totalSzStock = p => hasSizes(p) ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0) : (p.stock || 0);
@@ -177,7 +257,8 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
 
 // ─── Modal Modifier (desktop) — infos + frais + suppression ──────────
 const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
-  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null });
+  const vehicleInit = parseVehicleDesc(product.description) || emptyVehicleFields;
+  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null, ...vehicleInit });
   const [confirmDel, setConfirmDel] = useState(false);
   const [expLabel, setExpLabel] = useState("");
   const [expAmount, setExpAmount] = useState("");
@@ -194,7 +275,8 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
     const computedStock = form.sizes
       ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0)
       : parseInt(form.stock) || 0;
-    prodA.update({ ...form, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null });
+    const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
+    prodA.update({ ...form, description, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null });
     onClose();
   };
 
@@ -243,7 +325,11 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
             <SizesToggle form={form} set={set} setForm={setForm} />
             {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
           </>}
-          <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+          <VehicleToggle form={form} set={set} />
+          {form.isVehicle
+            ? <VehicleFields form={form} set={set} />
+            : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+          }
           <div style={{ gridColumn: "1/-1" }}>
             <Lbl>Photo</Lbl>
             <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -344,14 +430,19 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
 
   const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setProdModal("add"); };
 
-  const openEditMobile = p => { setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null }); setProdModal(p); };
+  const openEditMobile = p => {
+    const vehicleData = parseVehicleDesc(p.description) || emptyVehicleFields;
+    setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null, ...vehicleData });
+    setProdModal(p);
+  };
 
   const saveProd = () => {
     if (!form.name.trim() || !form.bizId) return;
     const computedStock = form.sizes
       ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0)
       : parseInt(form.stock) || 0;
-    const prod = { ...form, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null, deletedAt: null };
+    const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
+    const prod = { ...form, description, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null, deletedAt: null };
     if (typeof prodModal === "string") prodA.add(prod);
     else prodA.update(prod);
     setProdModal(null);
@@ -657,7 +748,11 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
               <SizesToggle form={form} set={set} setForm={setForm} />
               {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
             </>}
-            <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+            <VehicleToggle form={form} set={set} />
+            {form.isVehicle
+              ? <VehicleFields form={form} set={set} />
+              : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+            }
           </div>
           <div style={{ marginTop: 14 }}>
             <Lbl>Photo</Lbl>
