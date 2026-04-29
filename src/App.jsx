@@ -122,7 +122,7 @@ export default function App() {
     try {
       const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.allSettled([
         tq(supabase.from("businesses").select("*").eq("user_id", userId)),
-        tq(supabase.from("products").select("*").eq("user_id", userId)),
+        tq(supabase.from("products").select("id,user_id,biz_id,name,category,buy_price,sell_price,stock,unit,description,deleted_at,created_at,size,sizes").eq("user_id", userId)),
         tq(supabase.from("sales").select("*").eq("user_id", userId)),
         tq(supabase.from("rental_assets").select("*").eq("user_id", userId)),
         tq(supabase.from("rental_bookings").select("*").eq("user_id", userId)),
