@@ -115,18 +115,22 @@ export default function App() {
     const now = Date.now();
     const keep = x => !(x.deleted_at && (now - new Date(x.deleted_at).getTime()) >= TRASH_MS);
 
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
     try {
-      const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.all([
-        supabase.from("businesses").select("*").eq("user_id", userId),
-        supabase.from("products").select("*").eq("user_id", userId),
-        supabase.from("sales").select("*").eq("user_id", userId),
-        supabase.from("rental_assets").select("*").eq("user_id", userId),
-        supabase.from("rental_bookings").select("*").eq("user_id", userId),
-        supabase.from("partners").select("*").eq("user_id", userId),
-        supabase.from("sale_partners").select("*").eq("user_id", userId),
-        supabase.from("partner_payments").select("*").eq("user_id", userId),
-        supabase.from("subscriptions").select("*").eq("user_id", userId),
-        supabase.from("product_expenses").select("*").eq("user_id", userId),
+      const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.race([
+        Promise.all([
+          supabase.from("businesses").select("*").eq("user_id", userId),
+          supabase.from("products").select("*").eq("user_id", userId),
+          supabase.from("sales").select("*").eq("user_id", userId),
+          supabase.from("rental_assets").select("*").eq("user_id", userId),
+          supabase.from("rental_bookings").select("*").eq("user_id", userId),
+          supabase.from("partners").select("*").eq("user_id", userId),
+          supabase.from("sale_partners").select("*").eq("user_id", userId),
+          supabase.from("partner_payments").select("*").eq("user_id", userId),
+          supabase.from("subscriptions").select("*").eq("user_id", userId),
+          supabase.from("product_expenses").select("*").eq("user_id", userId),
+        ]),
+        timeout,
       ]);
 
       setBiz((b.data || []).filter(keep).map(M.biz.from));
@@ -142,7 +146,8 @@ export default function App() {
 
       setDark(localStorage.getItem("bhub_theme") === "dark");
     } catch (e) {
-      console.error("[loadAll] erreur réseau:", e);
+      console.error("[loadAll] erreur:", e.message);
+      showError("Erreur de chargement. Vérifiez votre connexion et réessayez.");
     } finally {
       setLoaded(true);
     }
