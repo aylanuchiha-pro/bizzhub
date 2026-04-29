@@ -1,0 +1,98 @@
+====================================================================
+  RECAP SESSION — 29 avril 2026
+====================================================================
+
+ÉTAT ACTUEL
+-----------
+L'app est fonctionnelle et poussée sur main (commit aa8d68f).
+Branch : main | Remote : github.com:aylanuchiha-pro/bizzhub.git
+
+
+BUGS CORRIGÉS CETTE SESSION
+-----------------------------
+
+1. ISOLATION DES DONNÉES (critique)
+   Fichier : src/App.jsx — fonction loadAll()
+   Problème : toutes les requêtes Supabase faisaient .select("*") sans
+   filtrer par user_id. Résultat : chaque utilisateur voyait les données
+   de tous les autres.
+   Fix : loadAll() reçoit maintenant le session en paramètre et ajoute
+   .eq("user_id", userId) sur les 10 requêtes.
+
+2. COMPTEUR LOCATIONS TOUJOURS 0 (Activités)
+   Fichier : src/views/Businesses.jsx
+   Problème : le composant destructurait le prop "rentals" mais le vrai
+   nom du prop transmis par App.jsx est "rentalAssets". Résultat : le
+   compteur "X location(s)" par activité affichait toujours 0.
+   Fix : renommé "rentals" → "rentalAssets" dans le destructuring.
+
+3. SUPPRESSION EN CASCADE INCOMPLÈTE
+   Fichier : src/App.jsx — fonction deleteBiz()
+   Problème : supprimer une activité soft-deletait ses produits, ventes,
+   assets et abonnements — mais PAS les rental_bookings liées à ces
+   assets (les bookings n'ont pas de biz_id direct, seulement asset_id).
+   Résultat : les réservations orphelines restaient visibles dans Locations.
+   Fix : on récupère d'abord les assetIds de l'activité, puis on
+   soft-delete les bookings avec .in("asset_id", assetIds).
+
+4. WARNINGS REACT (clés manquantes dans tableaux)
+   Fichiers : src/views/Sales.jsx, src/views/Products.jsx
+   Problème : les fragments <> retournés dans les .map() des tableaux
+   n'avaient pas de key. React affichait des warnings en console.
+   Fix : remplacé <> par <Fragment key={...}> (import ajouté).
+
+
+STRUCTURE DE L'APP
+------------------
+src/
+  App.jsx              — Racine : auth, chargement données, actions CRUD
+  supabase.js          — Client Supabase
+  utils.js             — Helpers + mappers DB↔JS (M.biz, M.prod, etc.)
+  theme.js             — CSS variables (dark/light)
+  components/
+    Auth.jsx           — Page de connexion
+    Sidebar.jsx        — Navigation desktop + mobile
+    ui.jsx             — Composants partagés (Btn, Card, Modal, etc.)
+  views/
+    Dashboard.jsx      — KPIs + graphiques (recharts) + alertes stock
+    Businesses.jsx     — Gestion des activités (CRUD)
+    Products.jsx       — Catalogue produits + stock + frais + vente rapide
+    Sales.jsx          — Ventes avec filtres période/activité/recherche
+    Rentals.jsx        — Véhicules/actifs locatifs + réservations
+    Partners.jsx       — Partenaires + commissions + paiements
+    Subscriptions.jsx  — Abonnements récurrents
+    Trash.jsx          — Corbeille (soft-delete 30 jours)
+
+
+FONCTIONNALITÉS NOTABLES
+-------------------------
+- Mode véhicule (Tixycars) dans les produits : champs spécifiques
+  (année, km, carburant, CT…) encodés en pipe-separated dans la
+  description. Ajouté dans le dernier commit avant cette session.
+- Stock par taille (S/M/L/XL/XXL) sur les produits physiques.
+- Filtre période dans les ventes (7j / ce mois / cette année).
+- Soft-delete 30 jours sur toutes les entités principales.
+- Optimistic updates : l'UI se met à jour avant la réponse Supabase.
+
+
+BASE DE DONNÉES (Supabase)
+---------------------------
+Tables : businesses, products, sales, rental_assets, rental_bookings,
+         partners, sale_partners, partner_payments, subscriptions,
+         product_expenses
+Toutes ont une colonne user_id et deleted_at (soft-delete).
+Scripts de migration : schema.sql, schema_update.sql, schema_update_v3.sql,
+schema_update_v4.sql (dans la racine du projet).
+Note : RLS (Row Level Security) non configurée côté Supabase
+(app privée, filtrage fait uniquement côté client).
+
+
+CE QUI N'EXISTE PAS ENCORE / PISTES POSSIBLES
+-----------------------------------------------
+- Pas d'édition des réservations (rental_bookings) : le state
+  editBooking est déclaré dans Rentals.jsx mais jamais utilisé.
+- Pas de pagination sur les listes (ventes, produits…).
+- Pas d'export (CSV/PDF).
+- Pas de notifications push pour les abonnements à venir.
+
+====================================================================
