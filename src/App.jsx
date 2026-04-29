@@ -115,22 +115,22 @@ export default function App() {
     const now = Date.now();
     const keep = x => !(x.deleted_at && (now - new Date(x.deleted_at).getTime()) >= TRASH_MS);
 
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 15000));
+    const tq = (name, promise) => {
+      const t = new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout:${name}`)), 10000));
+      return Promise.race([promise, t]);
+    };
     try {
-      const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.race([
-        Promise.all([
-          supabase.from("businesses").select("*").eq("user_id", userId),
-          supabase.from("products").select("*").eq("user_id", userId),
-          supabase.from("sales").select("*").eq("user_id", userId),
-          supabase.from("rental_assets").select("*").eq("user_id", userId),
-          supabase.from("rental_bookings").select("*").eq("user_id", userId),
-          supabase.from("partners").select("*").eq("user_id", userId),
-          supabase.from("sale_partners").select("*").eq("user_id", userId),
-          supabase.from("partner_payments").select("*").eq("user_id", userId),
-          supabase.from("subscriptions").select("*").eq("user_id", userId),
-          supabase.from("product_expenses").select("*").eq("user_id", userId),
-        ]),
-        timeout,
+      const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.all([
+        tq("businesses",      supabase.from("businesses").select("*").eq("user_id", userId)),
+        tq("products",        supabase.from("products").select("*").eq("user_id", userId)),
+        tq("sales",           supabase.from("sales").select("*").eq("user_id", userId)),
+        tq("rental_assets",   supabase.from("rental_assets").select("*").eq("user_id", userId)),
+        tq("rental_bookings", supabase.from("rental_bookings").select("*").eq("user_id", userId)),
+        tq("partners",        supabase.from("partners").select("*").eq("user_id", userId)),
+        tq("sale_partners",   supabase.from("sale_partners").select("*").eq("user_id", userId)),
+        tq("partner_payments",supabase.from("partner_payments").select("*").eq("user_id", userId)),
+        tq("subscriptions",   supabase.from("subscriptions").select("*").eq("user_id", userId)),
+        tq("product_expenses",supabase.from("product_expenses").select("*").eq("user_id", userId)),
       ]);
 
       setBiz((b.data || []).filter(keep).map(M.biz.from));
@@ -146,8 +146,8 @@ export default function App() {
 
       setDark(localStorage.getItem("bhub_theme") === "dark");
     } catch (e) {
-      console.error("[loadAll] erreur:", e.message);
-      showError("Erreur de chargement. Vérifiez votre connexion et réessayez.");
+      console.error("[loadAll] REQUÊTE BLOQUÉE:", e.message);
+      showError(`Erreur: ${e.message}`);
     } finally {
       setLoaded(true);
     }
