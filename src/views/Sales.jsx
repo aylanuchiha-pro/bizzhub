@@ -54,7 +54,16 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
     setErrors(e);
     if (Object.keys(e).length) return;
 
-    const sN = parseFloat(form.sellPrice), cN = parseFloat(form.costPrice) || 0, qN = parseInt(form.qty) || 1;
+    const qN = parseInt(form.qty) || 1;
+    if (form.productId) {
+      const selProd = active(prods).find(p => p.id === form.productId);
+      if (selProd?.category === "physical") {
+        const avail = selProd.sizes && form.size ? (selProd.sizes[form.size] || 0) : selProd.stock;
+        if (qN > avail) { setErrors(r => ({ ...r, qty: true })); return; }
+      }
+    }
+
+    const sN = parseFloat(form.sellPrice), cN = parseFloat(form.costPrice) || 0;
     const saleId = uid();
     saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, deletedAt: null });
 
@@ -154,7 +163,10 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
             return extra > 0 ? <p style={{ fontSize: 11, color: "var(--warn)", marginTop: 4 }}>Dont {euro(extra)} de frais additionnels inclus</p> : null;
           })()}
         </F>
-        <F label="Quantité"><input type="number" value={form.qty} onChange={e => set("qty", e.target.value)} min="1" /></F>
+        <F label="Quantité">
+          <input type="number" value={form.qty} onChange={e => { set("qty", e.target.value); setErrors(r => ({ ...r, qty: false })); }} min="1" style={errors.qty ? { borderColor: "var(--err)" } : {}} />
+          {errors.qty && <p style={{ fontSize: 11, color: "var(--err)", marginTop: 4 }}>⚠ Stock insuffisant</p>}
+        </F>
         <F label="Date"><input type="date" value={form.date} onChange={e => set("date", e.target.value)} /></F>
         <F label="Notes"><input value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Remarques…" /></F>
       </div>

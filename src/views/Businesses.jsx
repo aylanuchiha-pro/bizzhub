@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { uid, active, PALETTE } from "../utils";
-import { Btn, Lbl, Card, Empty, Confirm, Divider } from "../components/ui";
+import { Btn, Lbl, F, Card, Empty, Confirm, Divider, Modal } from "../components/ui";
 
 export default function Businesses({ biz, bizA, prods, sales, rentalAssets, deleteBiz }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState(PALETTE[0]);
   const [err, setErr] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [editBiz, setEditBiz] = useState(null);
   const aBiz = active(biz);
+
+  const saveEdit = () => {
+    if (!editBiz.name.trim()) return;
+    bizA.update({ ...editBiz, name: editBiz.name.trim() });
+    setEditBiz(null);
+  };
 
   const add = () => {
     if (!name.trim()) { setErr(true); return; }
@@ -65,13 +72,38 @@ export default function Businesses({ biz, bizA, prods, sales, rentalAssets, dele
                   <p style={{ fontWeight: 600 }}>{b.name}</p>
                   <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>{pCount} produit(s) · {sCount} vente(s) · {rCount} location(s)</p>
                 </div>
-                <Btn sm variant="err" onClick={() => askDel(b)}>Supprimer</Btn>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Btn sm variant="ghost" onClick={() => setEditBiz({ id: b.id, name: b.name, color: b.color })}>Éditer</Btn>
+                  <Btn sm variant="err" onClick={() => askDel(b)}>Supprimer</Btn>
+                </div>
               </Card>
             );
           })}
         </div>
       )}
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
+
+      {editBiz && (
+        <Modal title="Modifier l'activité" onClose={() => setEditBiz(null)} width={400}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <F label="Nom">
+              <input value={editBiz.name} onChange={e => setEditBiz(b => ({ ...b, name: e.target.value }))} onKeyDown={e => e.key === "Enter" && saveEdit()} autoFocus />
+            </F>
+            <div>
+              <Lbl>Couleur</Lbl>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {PALETTE.map(c => (
+                  <button key={c} onClick={() => setEditBiz(b => ({ ...b, color: c }))} style={{ width: 26, height: 26, borderRadius: 6, background: c, border: `2.5px solid ${editBiz.color === c ? "#000" : "transparent"}`, cursor: "pointer", transition: "border .1s" }} />
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Btn onClick={() => setEditBiz(null)}>Annuler</Btn>
+              <Btn variant="pri" onClick={saveEdit} disabled={!editBiz.name.trim()}>Enregistrer</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

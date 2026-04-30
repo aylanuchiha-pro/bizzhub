@@ -30,7 +30,8 @@ export default function Partners({ partners, partnerA, sales, salePartners, spA,
   });
 
   const getStats = partnerId => {
-    const pSales = salePartners.filter(sp => sp.partnerId === partnerId);
+    const activeSaleIds = new Set(aSales.map(s => s.id));
+    const pSales = salePartners.filter(sp => sp.partnerId === partnerId && activeSaleIds.has(sp.saleId));
     const totalDue = pSales.reduce((a, sp) => a + sp.amountDue, 0);
     const totalPaid = (payments || []).filter(p => p.partnerId === partnerId).reduce((a, p) => a + p.amount, 0);
     return { totalDue, totalPaid, balance: totalDue - totalPaid, count: pSales.length };

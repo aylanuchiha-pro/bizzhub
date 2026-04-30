@@ -1,0 +1,112 @@
+====================================================================
+  NEXT SESSION — Migration images : base64 → Cloudflare R2
+====================================================================
+
+CONTEXTE
+--------
+Actuellement, toutes les images de produits sont stockées en base64
+directement dans la colonne "image" de la table "products" (Supabase).
+Cette approche ralentit le chargement car les images sont embarquées
+dans chaque requête DB.
+
+L'app bizapp est aussi liée à un site vitrine de voitures (Tixycars),
+ce qui implique des photos haute qualité. Le plan Free Supabase Storage
+(1 GB + 2 GB/mois bande passante) serait trop vite dépassé.
+
+DÉCISION PRISE
+--------------
+Migrer le stockage des images vers Cloudflare R2 :
+- 10 GB gratuits/mois
+- ZÉRO frais d'egress (bande passante illimitée et gratuite)
+- Au-delà : $0.015/GB stockage seulement
+- Compatible avec l'API S3 (facile à intégrer)
+
+Supabase reste utilisé pour toutes les données (pas les images).
+
+
+CE QU'IL FAUT FAIRE
+--------------------
+
+ÉTAPE 1 — Créer un bucket Cloudflare R2
+  - Aller sur dash.cloudflare.com → R2 Object Storage
+  - Créer un bucket (ex: "bizapp-images")
+  - Activer l'accès public (Public Bucket) pour servir les images via URL
+  - Générer des clés API R2 (Access Key ID + Secret Access Key)
+  - Récupérer l'URL publique du bucket (ex: https://pub-xxx.r2.dev)
+
+ÉTAPE 2 — Adapter l'upload dans le code
+  Fichiers concernés :
+    - src/views/Products.jsx  (ligne ~344 : onChange du input file)
+    - src/views/Rentals.jsx   (même pattern pour les véhicules)
+    - src/utils.js            (fonction compressImg déjà présente)
+
+  Actuellement (Products.jsx ~344) :
+    onChange={async e => {
+      const f = e.target.files[0];
+      if (f) { const b64 = await compressImg(f); set("image", b64); }
+    }}
+
+  À remplacer par :
+    1. Compresser l'image (garder compressImg de utils.js)
+    2. Upload le blob sur R2 via fetch + PUT signé (ou via worker CF)
+    3. Stocker l'URL publique (ex: https://pub-xxx.r2.dev/products/uuid.jpg)
+       à la place du base64 dans form.image
+
+ÉTAPE 3 — Adapter la colonne DB
+  La colonne "image" dans la table "products" stocke actuellement du base64.
+  Après migration, elle stockera une URL courte (ex: https://pub-xxx.r2.dev/...).
+  Aucun changement de schéma nécessaire, juste le contenu change.
+
+ÉTAPE 4 — Migration des images existantes (optionnel)
+  Les anciens produits ont encore du base64 en base.
+  On peut :
+    a) Laisser les anciennes en base64 (elles fonctionnent encore)
+    b) Écrire un script de migration one-shot pour uploader les
+       anciennes images sur R2 et mettre à jour les URLs en DB
+
+ÉTAPE 5 — Supprimer les images sur R2 lors de la suppression produit
+  Quand un produit est supprimé (soft-delete ou hard-delete), penser
+  à supprimer le fichier correspondant sur R2 pour ne pas accumuler
+  des fichiers orphelins.
+
+
+APPROCHE TECHNIQUE RECOMMANDÉE POUR L'UPLOAD
+---------------------------------------------
+Option A — Upload direct depuis le navigateur via URL présignée
+  1. Créer un Cloudflare Worker qui génère une URL présignée S3
+  2. Le front upload directement sur R2 avec cette URL
+  Avantage : pas de passage des données par un serveur
+  Inconvénient : nécessite un Worker CF (gratuit mais à déployer)
+
+Option B — Upload via Supabase Edge Function
+  1. Une Edge Function Supabase reçoit l'image et la reroute vers R2
+  Avantage : tout reste dans Supabase
+  Inconvénient : double transit réseau
+
+Option C — SDK AWS S3 (côté client avec clés publiques limitées)
+  Utiliser @aws-sdk/client-s3 ou aws4fetch depuis le front
+  avec des clés R2 à permissions restreintes (putObject uniquement)
+  Avantage : simple, pas de backend
+  Risque : clés exposées côté client (acceptable si permissions limitées)
+
+→ Recommandation : Option A (Worker CF) ou Option C si on veut
+  rester simple sans déployer un Worker.
+
+
+RAPPEL STRUCTURE ACTUELLE
+--------------------------
+src/utils.js         — compressImg() : compress + retourne base64 (à adapter)
+src/views/Products.jsx — input file ligne ~344 (mode desktop) et ~767 (mode mobile)
+src/views/Rentals.jsx  — même pattern pour les véhicules locatifs
+La colonne "image" est dans la table "products" (et probablement rental_assets)
+
+
+VARIABLES D'ENVIRONNEMENT À AJOUTER
+-------------------------------------
+VITE_R2_ACCOUNT_ID=xxxx
+VITE_R2_ACCESS_KEY_ID=xxxx
+VITE_R2_SECRET_ACCESS_KEY=xxxx
+VITE_R2_BUCKET=bizapp-images
+VITE_R2_PUBLIC_URL=https://pub-xxx.r2.dev
+
+====================================================================
