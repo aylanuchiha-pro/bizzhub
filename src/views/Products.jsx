@@ -1,7 +1,90 @@
 import { useState, Fragment } from "react";
-import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, compressImg, pct } from "../utils";
+import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, pct } from "../utils";
 import { euro } from "../utils";
+import { supabase } from "../supabase";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
+
+// ─── Supabase Storage helpers ────────────────────────────────────
+const compressToBlob = (file, maxDim = 1200, quality = 0.82) => new Promise(res => {
+  const img = new Image();
+  const r = new FileReader();
+  r.onload = e => {
+    img.src = e.target.result;
+    img.onload = () => {
+      const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(blob => res(blob), "image/jpeg", quality);
+    };
+  };
+  r.readAsDataURL(file);
+});
+
+const uploadImage = async (file) => {
+  const blob = await compressToBlob(file);
+  const path = `${uid()}.jpg`;
+  const { error } = await supabase.storage.from("product-images").upload(path, blob, { contentType: "image/jpeg" });
+  if (error) throw error;
+  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+  return data.publicUrl;
+};
+
+const deleteStorageImage = async (url) => {
+  const marker = "/product-images/";
+  const idx = url.indexOf(marker);
+  if (idx === -1) return;
+  const path = url.slice(idx + marker.length);
+  await supabase.storage.from("product-images").remove([path]);
+};
+
+// ─── Sélecteur de photos ─────────────────────────────────────────
+const PhotosField = ({ images, onAdd, onRemove }) => {
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState(null);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setUploadErr(null);
+    try {
+      const url = await uploadImage(file);
+      onAdd(url);
+    } catch (err) {
+      console.error("[upload]", err);
+      setUploadErr(`Erreur : ${err?.message || "inconnue"}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        {images.map((url) => (
+          <div key={url} style={{ position: "relative", flexShrink: 0 }}>
+            <img src={url} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
+            <button onClick={() => onRemove(url)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--err)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          </div>
+        ))}
+        {uploading && (
+          <div style={{ width: 64, height: 64, borderRadius: 10, border: "1px dashed var(--brd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, color: "var(--mut)" }}>⏳</div>
+        )}
+        {images.length < 5 && !uploading && (
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)", flexShrink: 0 }}>
+            <span>📷</span><span>{images.length === 0 ? "Ajouter des photos" : "Ajouter"}</span>
+            <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
+          </label>
+        )}
+      </div>
+      {uploadErr && <p style={{ fontSize: 11, color: "var(--err)", marginTop: 6 }}>{uploadErr}</p>}
+      {images.length > 0 && <p style={{ fontSize: 10, color: "var(--mut)", marginTop: 5 }}>{images.length}/5 — La 1ère photo est la photo principale</p>}
+    </div>
+  );
+};
 
 // ─── Constantes véhicule ─────────────────────────────────────────
 const VEHICLE_FUELS = ["Essence", "Diesel", "Hybride", "Électrique", "GPL"];
@@ -83,7 +166,7 @@ const VehicleFields = ({ form, set }) => (
   </>
 );
 
-const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, size: "", sizes: null, ...emptyVehicleFields };
+const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, images: [], size: "", sizes: null, ...emptyVehicleFields };
 
 const hasSizes = p => p.sizes && typeof p.sizes === "object" && SIZES.some(s => (p.sizes[s] || 0) > 0);
 const totalSzStock = p => hasSizes(p) ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0) : (p.stock || 0);
@@ -258,8 +341,9 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
 // ─── Modal Modifier (desktop) — infos + frais + suppression ──────────
 const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
   const vehicleInit = parseVehicleDesc(product.description) || emptyVehicleFields;
-  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null, ...vehicleInit });
+  const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null, images: product.images || [], ...vehicleInit });
   const [confirmDel, setConfirmDel] = useState(false);
+  const [pendingDeletes, setPendingDeletes] = useState([]);
   const [expLabel, setExpLabel] = useState("");
   const [expAmount, setExpAmount] = useState("");
   const [expDate, setExpDate] = useState(today());
@@ -277,6 +361,7 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
       : parseInt(form.stock) || 0;
     const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
     prodA.update({ ...form, description, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null });
+    pendingDeletes.forEach(deleteStorageImage);
     onClose();
   };
 
@@ -331,19 +416,12 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
             : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
           }
           <div style={{ gridColumn: "1/-1" }}>
-            <Lbl>Photo</Lbl>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              {form.image && (
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <img src={form.image} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
-                  <button onClick={() => set("image", null)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--err)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                </div>
-              )}
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)" }}>
-                <span>📷</span><span>{form.image ? "Changer" : "Ajouter"}</span>
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { const b64 = await compressImg(f); set("image", b64); } e.target.value = ""; }} />
-              </label>
-            </div>
+            <Lbl>Photos (max 5)</Lbl>
+            <PhotosField
+              images={form.images || []}
+              onAdd={url => set("images", [...(form.images || []), url])}
+              onRemove={url => { set("images", (form.images || []).filter(u => u !== url)); setPendingDeletes(p => [...p, url]); }}
+            />
           </div>
         </div>
       </Section>
@@ -415,6 +493,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   const [editStock, setEditStock] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [pendingDeletes, setPendingDeletes] = useState([]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
@@ -428,11 +507,12 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   };
   const expCount = p => (expenses || []).filter(e => e.productId === p.id).length;
 
-  const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setProdModal("add"); };
+  const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setPendingDeletes([]); setProdModal("add"); };
 
   const openEditMobile = p => {
     const vehicleData = parseVehicleDesc(p.description) || emptyVehicleFields;
-    setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null, ...vehicleData });
+    setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null, images: p.images || [], ...vehicleData });
+    setPendingDeletes([]);
     setProdModal(p);
   };
 
@@ -445,6 +525,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     const prod = { ...form, description, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null, deletedAt: null };
     if (typeof prodModal === "string") prodA.add(prod);
     else prodA.update(prod);
+    pendingDeletes.forEach(deleteStorageImage);
+    setPendingDeletes([]);
     setProdModal(null);
   };
 
@@ -528,8 +610,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                           onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = ""; }}
                         >
                           <td style={{ padding: "10px 10px 10px 16px", width: 52 }}>
-                            {p.image
-                              ? <img src={p.image} alt="" style={{ width: 38, height: 38, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
+                            {p.images?.[0]
+                              ? <img src={p.images[0]} alt="" style={{ width: 38, height: 38, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
                               : <div style={{ width: 38, height: 38, borderRadius: 8, background: "var(--surf)", border: "1px solid var(--brd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, color: "var(--mut)" }}>◻</div>
                             }
                           </td>
@@ -640,8 +722,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
               return (
                 <div key={p.id} style={{ background: "var(--w)", border: `1px solid ${expanded ? "var(--ac)" : "var(--brd)"}`, borderRadius: 14, overflow: "hidden", boxShadow: "var(--sh)", transition: "border-color .15s" }}>
                   <button onClick={() => toggleExpand(p.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "12px 13px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
-                    {p.image
-                      ? <img src={p.image} alt="" style={{ width: 42, height: 42, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)", flexShrink: 0 }} />
+                    {p.images?.[0]
+                      ? <img src={p.images[0]} alt="" style={{ width: 42, height: 42, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)", flexShrink: 0 }} />
                       : <div style={{ width: 42, height: 42, borderRadius: 8, background: "var(--surf)", border: "1px solid var(--brd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, color: "var(--mut)", flexShrink: 0 }}>◻</div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -754,19 +836,12 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
             }
           </div>
           <div style={{ marginTop: 14 }}>
-            <Lbl>Photo</Lbl>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              {form.image && (
-                <div style={{ position: "relative", flexShrink: 0 }}>
-                  <img src={form.image} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
-                  <button onClick={() => set("image", null)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--err)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-                </div>
-              )}
-              <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)" }}>
-                <span>📷</span><span>{form.image ? "Changer" : "Ajouter une photo"}</span>
-                <input type="file" accept="image/*" style={{ display: "none" }} onChange={async e => { const f = e.target.files[0]; if (f) { const b64 = await compressImg(f); set("image", b64); } e.target.value = ""; }} />
-              </label>
-            </div>
+            <Lbl>Photos (max 5)</Lbl>
+            <PhotosField
+              images={form.images || []}
+              onAdd={url => set("images", [...(form.images || []), url])}
+              onRemove={url => { set("images", (form.images || []).filter(u => u !== url)); setPendingDeletes(p => [...p, url]); }}
+            />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
             <Btn onClick={() => setProdModal(null)}>Annuler</Btn>
