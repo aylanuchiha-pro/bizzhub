@@ -91,7 +91,7 @@ const VEHICLE_FUELS = ["Essence", "Diesel", "Hybride", "Électrique", "GPL"];
 const VEHICLE_TRANSMISSIONS = ["Manuelle", "Automatique"];
 const VEHICLE_CONDITIONS = ["Très bon état", "Bon état", "État correct", "À rénover"];
 
-const emptyVehicleFields = { isVehicle: false, vBrand: "", vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "" };
+const emptyVehicleFields = { isVehicle: false, vBrand: "", vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "", available: false };
 
 // Détecte et parse une description au format véhicule "2010 | 112000 | Essence | …"
 function parseVehicleDesc(desc) {
@@ -202,6 +202,19 @@ const VehicleFields = ({ form, set }) => {
     <F label="Description (travaux, options…)" col="1/-1">
       <textarea value={form.vFreeDesc} onChange={e => set("vFreeDesc", e.target.value)} rows={3} style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} placeholder="Révision faite jan 2025, 4 pneus neufs, carnet d'entretien complet…" />
     </F>
+    <div style={{ gridColumn: "1/-1", padding: "12px 14px", background: form.available ? "rgba(22,163,74,.07)" : "var(--surf)", border: `1px solid ${form.available ? "rgba(22,163,74,.35)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
+      <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
+        <input type="checkbox" checked={!!form.available} onChange={e => set("available", e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#16a34a" }} />
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: form.available ? "var(--ok)" : "var(--sub)" }}>
+            {form.available ? "✓ Disponible sur Tixycars" : "Marquer comme disponible sur Tixycars"}
+          </p>
+          <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>
+            {form.available ? "Ce véhicule est visible sur le site vitrine" : "Le véhicule ne sera pas affiché sur le site vitrine"}
+          </p>
+        </div>
+      </label>
+    </div>
   </>
   );
 };
@@ -657,7 +670,10 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                             }
                           </td>
                           <td style={{ padding: "11px 16px" }}>
-                            <p style={{ fontWeight: 600 }}>{p.name}</p>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                              <p style={{ fontWeight: 600 }}>{p.name}</p>
+                              {p.available && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", background: "rgba(22,163,74,.1)", border: "1px solid rgba(22,163,74,.3)", borderRadius: 20, color: "var(--ok)", whiteSpace: "nowrap" }}>Dispo</span>}
+                            </div>
                             {p.description && <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>{p.description}</p>}
                           </td>
                           <td style={{ padding: "11px 16px" }}><Bdg label={bN(p.bizId)} color={bC(p.bizId)} sm /></td>
@@ -768,7 +784,10 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                       : <div style={{ width: 42, height: 42, borderRadius: 8, background: "var(--surf)", border: "1px solid var(--brd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, color: "var(--mut)", flexShrink: 0 }}>◻</div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, color: "var(--txt)" }}>{p.name}</p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <p style={{ fontWeight: 700, fontSize: 14, lineHeight: 1.3, color: "var(--txt)" }}>{p.name}</p>
+                        {p.available && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", background: "rgba(22,163,74,.1)", border: "1px solid rgba(22,163,74,.3)", borderRadius: 20, color: "var(--ok)", whiteSpace: "nowrap", flexShrink: 0 }}>Dispo</span>}
+                      </div>
                       <div style={{ display: "flex", gap: 5, marginTop: 4, flexWrap: "wrap", alignItems: "center" }}>
                         <Bdg label={bN(p.bizId)} color={bC(p.bizId)} sm />
                         <CatBdg id={p.category} />

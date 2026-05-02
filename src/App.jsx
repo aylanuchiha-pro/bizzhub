@@ -129,35 +129,48 @@ export default function App() {
     const now = Date.now();
     const keep = x => !(x.deleted_at && (now - new Date(x.deleted_at).getTime()) >= TRASH_MS);
 
-    const tq = (promise) => {
-      const t = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000));
-      return Promise.race([promise, t]);
+    const t0 = performance.now();
+    const tq = (name, promise) => {
+      const start = performance.now();
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000));
+      return Promise.race([promise, timeout]).then(r => {
+        console.log(`[load] ${name}: ${Math.round(performance.now() - start)}ms`);
+        return r;
+      }).catch(e => {
+        console.warn(`[load] ${name}: ÉCHEC (${Math.round(performance.now() - start)}ms) —`, e.message);
+        throw e;
+      });
     };
     try {
       const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.allSettled([
-        tq(supabase.from("businesses").select("*").eq("user_id", userId)),
-        tq(supabase.from("products").select("id,user_id,biz_id,name,category,buy_price,sell_price,stock,unit,description,deleted_at,created_at,size,sizes,images").eq("user_id", userId)),
-        tq(supabase.from("sales").select("*").eq("user_id", userId)),
-        tq(supabase.from("rental_assets").select("*").eq("user_id", userId)),
-        tq(supabase.from("rental_bookings").select("*").eq("user_id", userId)),
-        tq(supabase.from("partners").select("*").eq("user_id", userId)),
-        tq(supabase.from("sale_partners").select("*").eq("user_id", userId)),
-        tq(supabase.from("partner_payments").select("*").eq("user_id", userId)),
-        tq(supabase.from("subscriptions").select("*").eq("user_id", userId)),
-        tq(supabase.from("product_expenses").select("*").eq("user_id", userId)),
+        tq("businesses",       supabase.from("businesses").select("*").eq("user_id", userId)),
+        tq("products",         supabase.from("products").select("id,user_id,biz_id,name,category,buy_price,sell_price,stock,unit,description,deleted_at,created_at,size,sizes,images,available").eq("user_id", userId)),
+        tq("sales",            supabase.from("sales").select("*").eq("user_id", userId)),
+        tq("rental_assets",    supabase.from("rental_assets").select("*").eq("user_id", userId)),
+        tq("rental_bookings",  supabase.from("rental_bookings").select("*").eq("user_id", userId)),
+        tq("partners",         supabase.from("partners").select("*").eq("user_id", userId)),
+        tq("sale_partners",    supabase.from("sale_partners").select("*").eq("user_id", userId)),
+        tq("partner_payments", supabase.from("partner_payments").select("*").eq("user_id", userId)),
+        tq("subscriptions",    supabase.from("subscriptions").select("*").eq("user_id", userId)),
+        tq("product_expenses", supabase.from("product_expenses").select("*").eq("user_id", userId)),
       ]);
+      console.log(`[load] TOTAL: ${Math.round(performance.now() - t0)}ms`);
 
-      const get = r => (r.status === "fulfilled" ? r.value.data : null) || [];
-      setBiz(get(b).filter(keep).map(M.biz.from));
-      setProds(get(p).filter(keep).map(M.prod.from));
-      setSales(get(s).filter(keep).map(M.sale.from));
-      setRentalAssets(get(ra).filter(keep).map(M.asset.from));
-      setRentalBookings(get(rb).filter(keep).map(M.booking.from));
-      setPartners(get(pt).filter(keep).map(M.partner.from));
-      setSalePartners(get(sp).map(M.sp.from));
-      setPayments(get(pm).map(M.payment.from));
-      setSubs(get(sb).filter(keep).map(M.sub.from));
-      setExpenses(get(ex).map(M.expense.from));
+      const get = (r, name) => {
+        if (r.status === "rejected") { console.error(`[load] ${name}: rejeté —`, r.reason?.message); return []; }
+        if (r.value?.error) { console.error(`[load] ${name}: erreur DB —`, r.value.error.message); return []; }
+        return r.value?.data || [];
+      };
+      setBiz(get(b,"businesses").filter(keep).map(M.biz.from));
+      setProds(get(p,"products").filter(keep).map(M.prod.from));
+      setSales(get(s,"sales").filter(keep).map(M.sale.from));
+      setRentalAssets(get(ra,"rental_assets").filter(keep).map(M.asset.from));
+      setRentalBookings(get(rb,"rental_bookings").filter(keep).map(M.booking.from));
+      setPartners(get(pt,"partners").filter(keep).map(M.partner.from));
+      setSalePartners(get(sp,"sale_partners").map(M.sp.from));
+      setPayments(get(pm,"partner_payments").map(M.payment.from));
+      setSubs(get(sb,"subscriptions").filter(keep).map(M.sub.from));
+      setExpenses(get(ex,"product_expenses").map(M.expense.from));
 
       setDark(localStorage.getItem("bhub_theme") === "dark");
     } catch (e) {

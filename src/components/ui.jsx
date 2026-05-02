@@ -87,6 +87,20 @@ export const ChartTip = ({ active, payload, label }) => {
   );
 };
 
+export const ConfirmAcompte = ({ msg, sub, actions, onCancel }) => (
+  <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 20px" }}>
+    <div style={{ background: "var(--w)", borderRadius: 14, padding: 28, maxWidth: 400, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+      <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Supprimer la vente</p>
+      <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: 8 }}>{msg}</p>
+      {sub && <p style={{ fontSize: 12, color: "var(--warn)", marginBottom: 22, padding: "8px 12px", background: "rgba(217,119,6,.08)", borderRadius: 8, border: "1px solid rgba(217,119,6,.2)" }}>{sub}</p>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {actions.map((a, i) => <Btn key={i} variant={a.variant} onClick={a.onOk} full>{a.label}</Btn>)}
+        <Btn onClick={onCancel} full>Annuler</Btn>
+      </div>
+    </div>
+  </div>
+);
+
 export const Confirm = ({ msg, sub, onOk, onCancel }) => (
   <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 20px" }}>
     <div style={{ background: "var(--w)", borderRadius: 14, padding: 28, maxWidth: 380, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>

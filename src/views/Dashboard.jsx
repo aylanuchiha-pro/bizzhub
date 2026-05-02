@@ -15,8 +15,9 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
   const bizColor = id => aBiz.find(b => b.id === id)?.color ?? "var(--mut)";
 
   const stats = useMemo(() => {
-    const salesCa     = aSales.reduce((a, s) => a + s.sellPrice * s.qty, 0);
-    const salesProfit = aSales.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
+    const saleAmt = s => s.paymentStatus === "acompte" ? (s.depositAmount || 0) : s.sellPrice * s.qty;
+    const salesCa     = aSales.reduce((a, s) => a + saleAmt(s), 0);
+    const salesProfit = aSales.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
     const rentalCa    = aBookings.reduce((a, b) => a + b.sellPrice, 0);
     const rentalPropCost = aBookings.reduce((a, b) => {
       const asset = aAssets.find(x => x.id === b.assetId);
@@ -35,8 +36,8 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
       const ba = aAssets.filter(a => a.bizId === b.id);
       const baIds = ba.map(a => a.id);
       const bbk = aBookings.filter(b_ => baIds.includes(b_.assetId));
-      const ca = bs.reduce((a, s) => a + s.sellPrice * s.qty, 0) + bbk.reduce((a, b_) => a + b_.sellPrice, 0);
-      const profit = bs.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
+      const ca = bs.reduce((a, s) => a + saleAmt(s), 0) + bbk.reduce((a, b_) => a + b_.sellPrice, 0);
+      const profit = bs.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
         bbk.reduce((a, b_) => {
           const asset = aAssets.find(x => x.id === b_.assetId);
           const days = diffDays(b_.startDate, b_.endDate) || 0;
@@ -53,8 +54,8 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
       const mbk = aBookings.filter(b => (b.startDate || "").startsWith(key));
       return {
         name:   MO[d.getMonth()],
-        ca:     ms.reduce((a, s) => a + s.sellPrice * s.qty, 0) + mbk.reduce((a, b) => a + b.sellPrice, 0),
-        profit: ms.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
+        ca:     ms.reduce((a, s) => a + saleAmt(s), 0) + mbk.reduce((a, b) => a + b.sellPrice, 0),
+        profit: ms.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
           mbk.reduce((a, b_) => {
             const asset = aAssets.find(x => x.id === b_.assetId);
             const days = diffDays(b_.startDate, b_.endDate) || 0;

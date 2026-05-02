@@ -25,7 +25,7 @@ const NavBtn = ({ item, active, onClick, badge }) => (
 
 export function Sidebar({ tab, setTab, businesses, username, onLogout, dark, onToggleDark, trashCount }) {
   return (
-    <div className="sb" style={{ width: 215, background: "var(--sdbar)", borderRight: "1px solid var(--brd)", display: "flex", flexDirection: "column", flexShrink: 0, minHeight: "100vh" }}>
+    <div className="sb" style={{ width: 215, background: "var(--sdbar)", borderRight: "1px solid var(--brd)", display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh", position: "sticky", top: 0, overflowY: "auto" }}>
       <div style={{ padding: "22px 18px 16px" }}>
         <p onClick={() => setTab("dashboard")} style={{ fontWeight: 700, fontSize: 17, letterSpacing: "-.01em", cursor: "pointer" }}>Business<span style={{ color: "var(--ac)" }}>Hub</span></p>
         <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>@{username}</p>

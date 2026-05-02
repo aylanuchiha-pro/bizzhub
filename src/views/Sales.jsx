@@ -1,9 +1,9 @@
 import { useState, Fragment } from "react";
 import { uid, today, fmtDate, active, pct, SIZES } from "../utils";
 import { euro } from "../utils";
-import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview, Modal } from "../components/ui";
+import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, ConfirmAcompte, Preview, Modal } from "../components/ui";
 
-const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", size: "", withPartner: false, partnerId: "", sharePct: "50" };
+const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", size: "", withPartner: false, partnerId: "", sharePct: "50", paymentStatus: "complet", depositAmount: "" };
 
 const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
   const [form, setForm] = useState({
@@ -14,15 +14,19 @@ const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
     qty: String(sale.qty),
     date: sale.date,
     notes: sale.notes || "",
+    paymentStatus: sale.paymentStatus || "complet",
+    depositAmount: sale.depositAmount ? String(sale.depositAmount) : "",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const sN = parseFloat(form.sellPrice) || 0;
   const cN = parseFloat(form.costPrice) || 0;
   const qN = parseInt(form.qty) || 1;
+  const depN = parseFloat(form.depositAmount) || 0;
+  const isDeposit = form.paymentStatus === "acompte";
 
   const save = () => {
     if (!form.name.trim() || !form.sellPrice) return;
-    onSave({ ...sale, name: form.name.trim(), bizId: form.bizId, sellPrice: sN, costPrice: cN, qty: qN, date: form.date, notes: form.notes.trim() });
+    onSave({ ...sale, name: form.name.trim(), bizId: form.bizId, sellPrice: sN, costPrice: cN, qty: qN, date: form.date, notes: form.notes.trim(), paymentStatus: form.paymentStatus, depositAmount: isDeposit ? depN : 0 });
     onClose();
   };
 
@@ -41,10 +45,46 @@ const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
         <F label="Date"><input type="date" value={form.date} onChange={e => set("date", e.target.value)} /></F>
         <F label="Notes" col="1/-1"><input value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Remarques…" /></F>
       </div>
+      <div style={{ marginTop: 14, padding: "12px 14px", background: isDeposit ? "rgba(217,119,6,.06)" : "var(--surf)", border: `1px solid ${isDeposit ? "rgba(217,119,6,.3)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, userSelect: "none", fontWeight: 500 }}>
+          <input type="checkbox" checked={isDeposit} onChange={e => { set("paymentStatus", e.target.checked ? "acompte" : "complet"); if (!e.target.checked) set("depositAmount", ""); }} style={{ width: 15, height: 15, cursor: "pointer" }} />
+          <span style={{ color: isDeposit ? "var(--warn)" : "var(--sub)" }}>Acompte reçu (paiement partiel)</span>
+        </label>
+        {isDeposit && (
+          <div style={{ marginTop: 10, display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <F label="Montant de l'acompte (€)"><input type="number" value={form.depositAmount} onChange={e => set("depositAmount", e.target.value)} onFocus={e => e.target.select()} placeholder="500.00" style={{ maxWidth: 160 }} /></F>
+            {depN > 0 && sN > 0 && <p style={{ fontSize: 12, color: "var(--warn)", paddingBottom: 2 }}>Reste : <strong>{euro(sN * qN - depN)}</strong></p>}
+          </div>
+        )}
+      </div>
       {sN > 0 && <Preview ca={sN * qN} profit={(sN - cN) * qN} margin={pct(sN - cN, sN)} />}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
         <Btn onClick={onClose}>Annuler</Btn>
         <Btn variant="pri" onClick={save} disabled={!form.name.trim() || !form.sellPrice}>Enregistrer</Btn>
+      </div>
+    </Modal>
+  );
+};
+
+const SoldeModal = ({ sale, onClose, onSolde }) => {
+  const remaining = sale.sellPrice * sale.qty - (sale.depositAmount || 0);
+  return (
+    <Modal title={`Solder — ${sale.name}`} onClose={onClose} width={400}>
+      <div style={{ padding: "4px 0 16px" }}>
+        {[
+          { l: "Prix total", v: euro(sale.sellPrice * sale.qty), c: "var(--txt)", bold: false },
+          { l: "Acompte déjà reçu", v: `− ${euro(sale.depositAmount)}`, c: "var(--ok)", bold: false },
+          { l: "Reste à encaisser", v: euro(remaining), c: "var(--ac)", bold: true },
+        ].map((x, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--brd)" }}>
+            <span style={{ fontSize: 13, color: "var(--sub)" }}>{x.l}</span>
+            <strong style={{ fontSize: x.bold ? 16 : 13, color: x.c }}>{x.v}</strong>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+        <Btn onClick={onClose}>Annuler</Btn>
+        <Btn variant="success" onClick={() => { onSolde(); onClose(); }}>✓ Confirmer le solde</Btn>
       </div>
     </Modal>
   );
@@ -58,11 +98,24 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   const [ok, setOk] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const [editModal, setEditModal] = useState(null);
+  const [soldeModal, setSoldeModal] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [searchQ, setSearchQ] = useState("");
   const [filterPeriod, setFilterPeriod] = useState("all");
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const restoreStock = s => {
+    if (!s.productId) return;
+    const prod = active(prods).find(p => p.id === s.productId);
+    if (!prod || prod.category !== "physical") return;
+    if (prod.sizes && s.size) {
+      const newSizes = { ...prod.sizes, [s.size]: (prod.sizes[s.size] || 0) + s.qty };
+      prodA.update({ ...prod, sizes: newSizes, stock: SIZES.reduce((a, sz) => a + (newSizes[sz] || 0), 0) });
+    } else {
+      prodA.update({ ...prod, stock: prod.stock + s.qty });
+    }
+  };
 
   const aBiz = active(biz);
   const aPartners = active(partners);
@@ -110,8 +163,9 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
     }
 
     const sN = parseFloat(form.sellPrice), cN = parseFloat(form.costPrice) || 0;
+    const depN = form.paymentStatus === "acompte" ? parseFloat(form.depositAmount) || 0 : 0;
     const saleId = uid();
-    saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, deletedAt: null });
+    saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, paymentStatus: form.paymentStatus || "complet", depositAmount: depN, deletedAt: null });
 
     if (form.productId) {
       const prod = active(prods).find(p => p.id === form.productId);
@@ -136,11 +190,25 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
     setShowForm(false);
   };
 
-  const softDel = id => setConfirm({
-    msg: "Supprimer cette vente ?",
-    sub: "Elle sera déplacée dans la corbeille pendant 30 jours.",
-    onOk: () => { saleA.softDel(id); setConfirm(null); }
-  });
+  const softDel = id => {
+    const s = active(sales).find(x => x.id === id);
+    if (s?.paymentStatus === "acompte") {
+      setConfirm({
+        msg: `Supprimer "${s.name}" ?`,
+        sub: `Cette vente a un acompte de ${euro(s.depositAmount)}. Est-il conservé ou remboursé ?`,
+        actions: [
+          { label: "Conservé", variant: "warn", onOk: () => { restoreStock(s); saleA.update({ ...s, paymentStatus: "complet", sellPrice: s.depositAmount, qty: 1, costPrice: 0, name: s.name + " (annulé — acompte conservé)", notes: (s.notes ? s.notes + " — " : "") + `Acompte ${euro(s.depositAmount)} conservé` }); setConfirm(null); } },
+          { label: "Remboursé", variant: "err", onOk: () => { restoreStock(s); saleA.update({ ...s, notes: (s.notes ? s.notes + " — " : "") + `Acompte ${euro(s.depositAmount)} remboursé` }); saleA.softDel(id); setConfirm(null); } },
+        ],
+      });
+    } else {
+      setConfirm({
+        msg: "Supprimer cette vente ?",
+        sub: "Elle sera déplacée dans la corbeille pendant 30 jours.",
+        onOk: () => { restoreStock(s); saleA.softDel(id); setConfirm(null); },
+      });
+    }
+  };
 
   const aSales = active(sales);
   const sq = searchQ.trim().toLowerCase();
@@ -159,10 +227,12 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
     .filter(s => !periodFrom || s.date >= periodFrom)
     .sort((a, b) => b.date.localeCompare(a.date));
   const totCa = filtered.reduce((a, s) => a + s.sellPrice * s.qty, 0);
-  const totP = filtered.reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
+  const totEncaisse = filtered.reduce((a, s) => a + (s.paymentStatus === "acompte" ? (s.depositAmount || 0) : s.sellPrice * s.qty), 0);
+  const totP = filtered.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
+  const nbAcomptes = filtered.filter(s => s.paymentStatus === "acompte").length;
   const sN = parseFloat(form.sellPrice) || 0, cN = parseFloat(form.costPrice) || 0, qN = parseInt(form.qty) || 1;
 
-  const FormBlock = () => (
+  const formBlock = showForm ? (
     <Card style={{ padding: 20, marginBottom: 16 }}>
       <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Nouvelle vente</p>
       <div className="fg3" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px 16px" }}>
@@ -217,6 +287,21 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
         <F label="Notes"><input value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Remarques…" /></F>
       </div>
 
+      <div style={{ marginTop: 14, padding: "12px 14px", background: form.paymentStatus === "acompte" ? "rgba(217,119,6,.06)" : "var(--surf)", border: `1px solid ${form.paymentStatus === "acompte" ? "rgba(217,119,6,.3)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, userSelect: "none", fontWeight: 500 }}>
+          <input type="checkbox" checked={form.paymentStatus === "acompte"} onChange={e => { set("paymentStatus", e.target.checked ? "acompte" : "complet"); if (!e.target.checked) set("depositAmount", ""); }} style={{ width: 15, height: 15, cursor: "pointer" }} />
+          <span style={{ color: form.paymentStatus === "acompte" ? "var(--warn)" : "var(--sub)" }}>Acompte reçu (paiement partiel)</span>
+        </label>
+        {form.paymentStatus === "acompte" && (
+          <div style={{ marginTop: 10, display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <F label="Montant de l'acompte (€)"><input type="number" value={form.depositAmount} onChange={e => set("depositAmount", e.target.value)} onFocus={e => e.target.select()} placeholder="500.00" style={{ maxWidth: 160 }} /></F>
+            {form.depositAmount && form.sellPrice && parseFloat(form.depositAmount) > 0 && (
+              <p style={{ fontSize: 12, color: "var(--warn)", paddingBottom: 2 }}>Reste à encaisser : <strong>{euro(parseFloat(form.sellPrice) * (parseInt(form.qty) || 1) - parseFloat(form.depositAmount))}</strong></p>
+            )}
+          </div>
+        )}
+      </div>
+
       {aPartners.length > 0 && (
         <div style={{ marginTop: 14, padding: "14px 16px", background: "var(--surf)", borderRadius: 8, border: "1px solid var(--brd)" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
@@ -252,7 +337,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
         {Object.values(errors).some(Boolean) && <span style={{ color: "var(--err)", fontSize: 13 }}>Champs requis manquants</span>}
       </div>
     </Card>
-  );
+  ) : null;
 
   return (
     <div>
@@ -282,7 +367,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
         </div>
       </div>
 
-      {showForm && <FormBlock />}
+      {formBlock}
 
       {ok && !showForm && <p style={{ color: "var(--ok)", fontSize: 13, marginBottom: 12 }}>✓ Vente enregistrée</p>}
 
@@ -310,10 +395,18 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                           onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = ""; }}
                         >
                           <td style={{ padding: "12px 16px", color: "var(--mut)", whiteSpace: "nowrap" }}>{fmtDate(s.date)}</td>
-                          <td style={{ padding: "12px 16px", fontWeight: 600 }}>{s.name}</td>
+                          <td style={{ padding: "12px 16px", fontWeight: 600 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                              {s.name}
+                              {s.paymentStatus === "acompte" && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", background: "rgba(217,119,6,.12)", border: "1px solid rgba(217,119,6,.35)", borderRadius: 20, color: "var(--warn)", whiteSpace: "nowrap" }}>Acompte</span>}
+                            </div>
+                          </td>
                           <td style={{ padding: "12px 16px" }}><Bdg label={bN(s.bizId)} color={bC(s.bizId)} sm /></td>
-                          <td style={{ padding: "12px 16px", fontWeight: 500, color: "var(--ac)" }}>{euro(ca)}</td>
-                          <td style={{ padding: "12px 16px", fontWeight: 700, color: profit >= 0 ? "var(--ok)" : "var(--err)" }}>{euro(profit)}</td>
+                          <td style={{ padding: "12px 16px", fontWeight: 500, color: "var(--ac)" }}>
+                            {euro(ca)}
+                            {s.paymentStatus === "acompte" && <p style={{ fontSize: 10, color: "var(--warn)", marginTop: 1 }}>encaissé : {euro(s.depositAmount)}</p>}
+                          </td>
+                          <td style={{ padding: "12px 16px", fontWeight: 700, color: s.paymentStatus === "acompte" ? "var(--warn)" : profit >= 0 ? "var(--ok)" : "var(--err)" }}>{s.paymentStatus === "acompte" ? "—" : euro(profit)}</td>
                           <td style={{ padding: "12px 16px", textAlign: "right", width: 32 }}>
                             <span style={{ fontSize: 10, color: "var(--mut)", display: "inline-block", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s" }}>▼</span>
                           </td>
@@ -354,8 +447,16 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                                     </div>
                                   )}
                                 </div>
+                                {s.paymentStatus === "acompte" && (
+                                  <div style={{ padding: "8px 12px", background: "rgba(217,119,6,.08)", border: "1px solid rgba(217,119,6,.25)", borderRadius: 8 }}>
+                                    <p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Acompte</p>
+                                    <p style={{ fontWeight: 700, fontSize: 13, color: "var(--warn)" }}>{euro(s.depositAmount)}</p>
+                                    <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>Reste : {euro(s.sellPrice * s.qty - s.depositAmount)}</p>
+                                  </div>
+                                )}
                                 <div style={{ flex: 1 }} />
                                 <div style={{ display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
+                                  {s.paymentStatus === "acompte" && <Btn sm variant="success" onClick={() => setSoldeModal(s)}>Solder</Btn>}
                                   <Btn sm variant="pri" onClick={() => setEditModal(s)}>Modifier</Btn>
                                   <Btn sm variant="err" onClick={() => softDel(s.id)}>Supprimer</Btn>
                                 </div>
@@ -369,11 +470,11 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                 </tbody>
               </table>
               <div style={{ padding: "10px 18px", borderTop: "1px solid var(--brd)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, fontSize: 12 }}>
-                <span style={{ color: "var(--mut)" }}>{filtered.length} vente(s)</span>
+                <span style={{ color: "var(--mut)" }}>{filtered.length} vente(s){nbAcomptes > 0 && <span style={{ color: "var(--warn)", marginLeft: 6 }}>· {nbAcomptes} en attente</span>}</span>
                 <span style={{ color: "var(--mut)" }}>
-                  CA : <strong style={{ color: "var(--ac)" }}>{euro(totCa)}</strong>{" · "}
+                  Encaissé : <strong style={{ color: "var(--ok)" }}>{euro(totEncaisse)}</strong>{totEncaisse !== totCa && <span style={{ color: "var(--mut)" }}> / {euro(totCa)}</span>}{" · "}
                   Bénéfice : <strong style={{ color: totP >= 0 ? "var(--ok)" : "var(--err)" }}>{euro(totP)}</strong>{" · "}
-                  Marge : <strong style={{ color: "var(--txt)" }}>{pct(totP, totCa)}</strong>
+                  Marge : <strong style={{ color: "var(--txt)" }}>{pct(totP, totEncaisse)}</strong>
                 </span>
               </div>
             </Card>
@@ -415,9 +516,13 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                         <span style={{ fontSize: 11, color: "var(--mut)" }}>{fmtDate(s.date)}</span>
                         {s.qty > 1 && <span style={{ fontSize: 11, color: "var(--sub)" }}>×{s.qty}</span>}
                         {s.size && <span style={{ fontSize: 11, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{s.size}</span>}
+                        {s.paymentStatus === "acompte" && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "rgba(217,119,6,.12)", border: "1px solid rgba(217,119,6,.35)", borderRadius: 5, color: "var(--warn)" }}>Acompte {euro(s.depositAmount)}</span>}
                       </div>
                     </div>
-                    <p style={{ fontWeight: 700, fontSize: 15, color: profit >= 0 ? "var(--ok)" : "var(--err)", flexShrink: 0, marginRight: 4 }}>{euro(profit)}</p>
+                    <div style={{ textAlign: "right", flexShrink: 0, marginRight: 4 }}>
+                      <p style={{ fontWeight: 700, fontSize: 15, color: s.paymentStatus === "acompte" ? "var(--warn)" : profit >= 0 ? "var(--ok)" : "var(--err)" }}>{s.paymentStatus === "acompte" ? euro(s.depositAmount) : euro(profit)}</p>
+                      {s.paymentStatus === "acompte" && <p style={{ fontSize: 10, color: "var(--mut)" }}>/{euro(s.sellPrice * s.qty)}</p>}
+                    </div>
                     <span style={{ fontSize: 11, color: "var(--mut)", display: "inline-block", transform: expanded ? "rotate(180deg)" : "none", transition: "transform .2s", flexShrink: 0 }}>▼</span>
                   </button>
 
@@ -436,10 +541,16 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                           </div>
                         ))}
                       </div>
+                      {s.paymentStatus === "acompte" && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 13px", borderBottom: "1px solid var(--brd)", background: "rgba(217,119,6,.05)" }}>
+                          <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>Reste à encaisser : <strong>{euro(s.sellPrice * s.qty - s.depositAmount)}</strong></span>
+                        </div>
+                      )}
                       {s.notes && (
                         <p style={{ padding: "8px 13px", fontSize: 12, color: "var(--mut)", borderBottom: "1px solid var(--brd)" }}>{s.notes}</p>
                       )}
                       <div style={{ padding: "10px 12px", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        {s.paymentStatus === "acompte" && <Btn sm variant="success" onClick={() => setSoldeModal(s)}>Solder</Btn>}
                         <Btn sm variant="pri" onClick={() => setEditModal(s)}>Modifier</Btn>
                         <Btn sm variant="err" onClick={() => softDel(s.id)}>Supprimer</Btn>
                       </div>
@@ -453,8 +564,12 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
         </>
       )}
 
-      {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
+      {confirm && (confirm.actions
+        ? <ConfirmAcompte {...confirm} onCancel={() => setConfirm(null)} />
+        : <Confirm {...confirm} onCancel={() => setConfirm(null)} />
+      )}
       {editModal && <EditSaleModal sale={editModal} aBiz={aBiz} onClose={() => setEditModal(null)} onSave={s => saleA.update(s)} />}
+      {soldeModal && <SoldeModal sale={soldeModal} onClose={() => setSoldeModal(null)} onSolde={() => saleA.update({ ...soldeModal, paymentStatus: "complet", depositAmount: 0 })} />}
     </div>
   );
 }
