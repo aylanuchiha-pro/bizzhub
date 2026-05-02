@@ -1,9 +1,54 @@
 import { useState, Fragment } from "react";
 import { uid, today, fmtDate, active, pct, SIZES } from "../utils";
 import { euro } from "../utils";
-import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview } from "../components/ui";
+import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, Preview, Modal } from "../components/ui";
 
 const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", size: "", withPartner: false, partnerId: "", sharePct: "50" };
+
+const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
+  const [form, setForm] = useState({
+    name: sale.name,
+    bizId: sale.bizId,
+    sellPrice: String(sale.sellPrice),
+    costPrice: String(sale.costPrice),
+    qty: String(sale.qty),
+    date: sale.date,
+    notes: sale.notes || "",
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const sN = parseFloat(form.sellPrice) || 0;
+  const cN = parseFloat(form.costPrice) || 0;
+  const qN = parseInt(form.qty) || 1;
+
+  const save = () => {
+    if (!form.name.trim() || !form.sellPrice) return;
+    onSave({ ...sale, name: form.name.trim(), bizId: form.bizId, sellPrice: sN, costPrice: cN, qty: qN, date: form.date, notes: form.notes.trim() });
+    onClose();
+  };
+
+  return (
+    <Modal title={`Modifier — ${sale.name}`} onClose={onClose} width={500}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <F label="Désignation" col="1/-1"><input value={form.name} onChange={e => set("name", e.target.value)} /></F>
+        <F label="Activité" col="1/-1">
+          <select value={form.bizId} onChange={e => set("bizId", e.target.value)}>
+            {aBiz.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </F>
+        <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
+        <F label="Coût / Prix d'achat (€)"><input type="number" value={form.costPrice} onChange={e => set("costPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
+        <F label="Quantité"><input type="number" value={form.qty} onChange={e => set("qty", e.target.value)} onFocus={e => e.target.select()} min="1" /></F>
+        <F label="Date"><input type="date" value={form.date} onChange={e => set("date", e.target.value)} /></F>
+        <F label="Notes" col="1/-1"><input value={form.notes} onChange={e => set("notes", e.target.value)} placeholder="Remarques…" /></F>
+      </div>
+      {sN > 0 && <Preview ca={sN * qN} profit={(sN - cN) * qN} margin={pct(sN - cN, sN)} />}
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
+        <Btn onClick={onClose}>Annuler</Btn>
+        <Btn variant="pri" onClick={save} disabled={!form.name.trim() || !form.sellPrice}>Enregistrer</Btn>
+      </div>
+    </Modal>
+  );
+};
 
 export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, expenses }) {
   const [showForm, setShowForm] = useState(false);
@@ -12,6 +57,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
   const [errors, setErrors] = useState({});
   const [ok, setOk] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [editModal, setEditModal] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [searchQ, setSearchQ] = useState("");
   const [filterPeriod, setFilterPeriod] = useState("all");
@@ -309,7 +355,8 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                                   )}
                                 </div>
                                 <div style={{ flex: 1 }} />
-                                <div onClick={e => e.stopPropagation()}>
+                                <div style={{ display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
+                                  <Btn sm variant="pri" onClick={() => setEditModal(s)}>Modifier</Btn>
                                   <Btn sm variant="err" onClick={() => softDel(s.id)}>Supprimer</Btn>
                                 </div>
                               </div>
@@ -392,7 +439,8 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
                       {s.notes && (
                         <p style={{ padding: "8px 13px", fontSize: 12, color: "var(--mut)", borderBottom: "1px solid var(--brd)" }}>{s.notes}</p>
                       )}
-                      <div style={{ padding: "10px 12px", display: "flex", justifyContent: "flex-end" }}>
+                      <div style={{ padding: "10px 12px", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <Btn sm variant="pri" onClick={() => setEditModal(s)}>Modifier</Btn>
                         <Btn sm variant="err" onClick={() => softDel(s.id)}>Supprimer</Btn>
                       </div>
                     </>
@@ -406,6 +454,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
       )}
 
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
+      {editModal && <EditSaleModal sale={editModal} aBiz={aBiz} onClose={() => setEditModal(null)} onSave={s => saleA.update(s)} />}
     </div>
   );
 }

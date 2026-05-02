@@ -91,7 +91,7 @@ const VEHICLE_FUELS = ["Essence", "Diesel", "Hybride", "Électrique", "GPL"];
 const VEHICLE_TRANSMISSIONS = ["Manuelle", "Automatique"];
 const VEHICLE_CONDITIONS = ["Très bon état", "Bon état", "État correct", "À rénover"];
 
-const emptyVehicleFields = { isVehicle: false, vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "" };
+const emptyVehicleFields = { isVehicle: false, vBrand: "", vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "" };
 
 // Détecte et parse une description au format véhicule "2010 | 112000 | Essence | …"
 function parseVehicleDesc(desc) {
@@ -106,16 +106,24 @@ function parseVehicleDesc(desc) {
     vColor: parts[4] || "",
     vCondition: parts[5] || "Bon état",
     vCt: parts[6] || "",
-    vFreeDesc: parts.slice(7).join(" | ").trim(),
+    vBrand: parts[7] || "",
+    vFreeDesc: parts.slice(8).join(" | ").trim(),
   };
 }
 
 // Encode les champs véhicule vers la description pipe-séparée
 function encodeVehicleDesc(form) {
-  return [form.vYear, form.vMileage, form.vFuel, form.vTransmission, form.vColor, form.vCondition, form.vCt, form.vFreeDesc]
+  return [form.vYear, form.vMileage, form.vFuel, form.vTransmission, form.vColor, form.vCondition, form.vCt, form.vBrand, form.vFreeDesc]
     .map(v => String(v || "").trim())
     .join(" | ");
 }
+
+const CAR_BRANDS = [
+  "Audi", "BMW", "Citroën", "Dacia", "Fiat", "Ford", "Honda",
+  "Hyundai", "Kia", "Mazda", "Mercedes", "Mitsubishi", "Nissan",
+  "Opel", "Peugeot", "Renault", "Seat", "Skoda", "Suzuki",
+  "Tesla", "Toyota", "Volkswagen", "Volvo",
+];
 
 // ─── UI véhicule partagé ─────────────────────────────────────────
 const VehicleToggle = ({ form, set }) => (
@@ -134,11 +142,42 @@ const VehicleToggle = ({ form, set }) => (
   </div>
 );
 
-const VehicleFields = ({ form, set }) => (
+const VehicleFields = ({ form, set }) => {
+  const isCustom = !!form.vBrand && !CAR_BRANDS.includes(form.vBrand);
+  const [showCustom, setShowCustom] = useState(isCustom);
+  const selectValue = showCustom ? "Autre" : (form.vBrand || "");
+
+  const handleBrandSelect = e => {
+    if (e.target.value === "Autre") {
+      setShowCustom(true);
+      set("vBrand", "");
+    } else {
+      setShowCustom(false);
+      set("vBrand", e.target.value);
+    }
+  };
+
+  return (
   <>
     <div style={{ gridColumn: "1/-1", padding: "8px 12px", background: "rgba(79,70,229,.06)", border: "1px solid rgba(79,70,229,.2)", borderRadius: 8, fontSize: 12, color: "var(--ac)" }}>
       Ces champs seront affichés sur le site Tixycars
     </div>
+    <F label="Marque" col="1/-1">
+      <select value={selectValue} onChange={handleBrandSelect}>
+        <option value="">— Choisir une marque —</option>
+        {CAR_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+        <option value="Autre">Autre</option>
+      </select>
+      {showCustom && (
+        <input
+          autoFocus
+          value={form.vBrand}
+          onChange={e => set("vBrand", e.target.value)}
+          placeholder="Ex: Lamborghini, Ferrari…"
+          style={{ marginTop: 8 }}
+        />
+      )}
+    </F>
     <F label="Année"><input type="number" value={form.vYear} onChange={e => set("vYear", e.target.value)} placeholder="2010" /></F>
     <F label="Kilométrage (km)"><input type="number" value={form.vMileage} onChange={e => set("vMileage", e.target.value)} placeholder="112000" /></F>
     <F label="Carburant">
@@ -164,7 +203,8 @@ const VehicleFields = ({ form, set }) => (
       <textarea value={form.vFreeDesc} onChange={e => set("vFreeDesc", e.target.value)} rows={3} style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} placeholder="Révision faite jan 2025, 4 pneus neufs, carnet d'entretien complet…" />
     </F>
   </>
-);
+  );
+};
 
 const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, images: [], size: "", sizes: null, ...emptyVehicleFields };
 
@@ -339,6 +379,16 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
 };
 
 // ─── Modal Modifier (desktop) — infos + frais + suppression ──────────
+const Section = ({ title, children, right }) => (
+  <div style={{ marginBottom: 22 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".07em" }}>{title}</p>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
 const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
   const vehicleInit = parseVehicleDesc(product.description) || emptyVehicleFields;
   const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null, images: product.images || [], ...vehicleInit });
@@ -372,15 +422,6 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
     setExpLabel(""); setExpAmount(""); setExpDate(today());
   };
 
-  const Section = ({ title, children, right }) => (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <p style={{ fontSize: 11, fontWeight: 600, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".07em" }}>{title}</p>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
 
   return (
     <Modal title={`Modifier — ${product.name}`} onClose={onClose} width={620}>
@@ -398,12 +439,12 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
               {CATS.map(c => <option key={c.id} value={c.id}>{c.l}</option>)}
             </select>
           </F>
-          <F label="Prix d'achat / Coût de base (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} placeholder="0.00" /></F>
-          <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} placeholder="0.00" /></F>
+          <F label="Prix d'achat / Coût de base (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
+          <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
           {form.category === "physical" && <>
             {!form.sizes && (
               <>
-                <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
+                <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} onFocus={e => e.target.select()} min="0" /></F>
                 <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
               </>
             )}
@@ -817,12 +858,12 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                 {CATS.map(c => <option key={c.id} value={c.id}>{c.l}</option>)}
               </select>
             </F>
-            <F label="Prix d'achat (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} placeholder="0.00" /></F>
-            <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} placeholder="0.00" /></F>
+            <F label="Prix d'achat (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
+            <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
             {form.category === "physical" && <>
               {!form.sizes && (
                 <>
-                  <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} min="0" /></F>
+                  <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} onFocus={e => e.target.select()} min="0" /></F>
                   <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
                 </>
               )}
