@@ -91,4 +91,8 @@ export const M = {
     from: r => ({ id: r.id, productId: r.product_id, label: r.label, amount: r.amount, date: r.expense_date }),
     to: (o, uid) => ({ id: o.id, user_id: uid, product_id: o.productId, label: o.label, amount: o.amount, expense_date: o.date }),
   },
+  bizExpense: {
+    from: r => ({ id: r.id, bizId: r.biz_id || null, productId: r.product_id || null, label: r.label, amount: r.amount, date: r.expense_date, notes: r.notes || "", deletedAt: dt(r.deleted_at) }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId || null, product_id: o.productId || null, label: o.label, amount: o.amount, expense_date: o.date, notes: o.notes, deleted_at: iso(o.deletedAt) }),
+  },
 };

@@ -13,6 +13,7 @@ import Sales from "./views/Sales";
 import Rentals from "./views/Rentals";
 import Partners from "./views/Partners";
 import Subscriptions from "./views/Subscriptions";
+import BizExpenses from "./views/BizExpenses";
 import Trash from "./views/Trash";
 
 // ─── Generic Supabase action factory ─────────────────────────────
@@ -77,7 +78,7 @@ const Loader = () => (
 const TAB_LABELS = {
   dashboard: "Dashboard", products: "Produits & Stock", sales: "Ventes",
   rentals: "Locations", partners: "Partenaires", subscriptions: "Abonnements",
-  businesses: "Activités", trash: "Corbeille",
+  bizexpenses: "Frais", businesses: "Activités", trash: "Corbeille",
 };
 
 export default function App() {
@@ -99,6 +100,7 @@ export default function App() {
   const [payments, setPayments] = useState([]);
   const [subs, setSubs] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [bizExpenses, setBizExpenses] = useState([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -113,7 +115,7 @@ export default function App() {
         loadedUserRef.current = null;
         setBiz([]); setProds([]); setSales([]);
         setRentalAssets([]); setRentalBookings([]);
-        setPartners([]); setSalePartners([]); setPayments([]); setSubs([]); setExpenses([]);
+        setPartners([]); setSalePartners([]); setPayments([]); setSubs([]); setExpenses([]); setBizExpenses([]);
         setTab("dashboard"); setLoaded(true);
       }
     });
@@ -173,6 +175,12 @@ export default function App() {
       setExpenses(get(ex,"product_expenses").map(M.expense.from));
 
       setDark(localStorage.getItem("bhub_theme") === "dark");
+
+      // biz_expenses chargé séparément pour ne pas bloquer si la table n'existe pas encore
+      supabase.from("biz_expenses").select("*").eq("user_id", userId).then(({ data, error }) => {
+        if (!error && data) setBizExpenses(data.filter(keep).map(M.bizExpense.from));
+        else if (error) console.warn("[load] biz_expenses:", error.message);
+      }).catch(e => console.warn("[load] biz_expenses:", e.message));
     } catch (e) {
       console.error("[loadAll] erreur:", e.message);
     } finally {
@@ -194,7 +202,8 @@ export default function App() {
   const bookingA = mkActions("rental_bookings", M.booking, rentalBookings, setRentalBookings, userId, showError);
   const partnerA = mkActions("partners",        M.partner, partners,       setPartners,       userId, showError);
   const spA      = mkActions("sale_partners",   M.sp,      salePartners,   setSalePartners,   userId, showError);
-  const subA     = mkActions("subscriptions",   M.sub,     subs,           setSubs,           userId, showError);
+  const subA        = mkActions("subscriptions",  M.sub,        subs,         setSubs,         userId, showError);
+  const bizExpenseA = mkActions("biz_expenses",  M.bizExpense, bizExpenses,  setBizExpenses,  userId, showError);
   const paymentA = mkPaymentActions(payments, setPayments, userId, showError);
 
   const expenseA = {
@@ -256,17 +265,18 @@ export default function App() {
   const aBiz = active(biz);
   const trashCount =
     trashed(biz).length + trashed(prods).length + trashed(sales).length +
-    trashed(rentalAssets).length + trashed(subs).length;
+    trashed(rentalAssets).length + trashed(subs).length + trashed(bizExpenses).length;
 
   const shared = {
     biz, prods, sales, rentalAssets, rentalBookings,
-    partners, salePartners, payments, subs, expenses,
+    partners, salePartners, payments, subs, expenses, bizExpenses,
     bizA, prodA, saleA, assetA, bookingA,
-    partnerA, spA, subA, paymentA, expenseA, deleteBiz,
+    partnerA, spA, subA, paymentA, expenseA, bizExpenseA, deleteBiz,
   };
 
   const views = {
     dashboard:     <Dashboard {...shared} />,
+    bizexpenses:   <BizExpenses {...shared} />,
     products:      <Products {...shared} />,
     sales:         <Sales {...shared} />,
     rentals:       <Rentals {...shared} />,

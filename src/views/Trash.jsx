@@ -4,7 +4,7 @@ import { Btn, Card, Empty, Confirm, SectionTitle, CatBdg } from "../components/u
 import { useState } from "react";
 import { BOOKING_STATUS } from "../utils";
 
-export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAssets, assetA, rentalBookings, bookingA, subs, subA }) {
+export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAssets, assetA, rentalBookings, bookingA, subs, subA, bizExpenses, bizExpenseA }) {
   const [confirm, setConfirm] = useState(null);
 
   const tBiz       = trashed(biz);
@@ -13,7 +13,8 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
   const tAssets    = trashed(rentalAssets);
   const tBookings  = trashed(rentalBookings);
   const tSubs      = trashed(subs);
-  const total      = tBiz.length + tProd.length + tSales.length + tAssets.length + tBookings.length + tSubs.length;
+  const tBizExp    = trashed(bizExpenses || []);
+  const total      = tBiz.length + tProd.length + tSales.length + tAssets.length + tBookings.length + tSubs.length + tBizExp.length;
 
   const purgeAll = () => setConfirm({
     msg: "Vider la corbeille définitivement ?",
@@ -25,6 +26,7 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
       for (const x of tAssets)   await assetA.hardDel(x.id);
       for (const x of tBookings) await bookingA.hardDel(x.id);
       for (const x of tSubs)     await subA.hardDel(x.id);
+      for (const x of tBizExp)   await bizExpenseA.hardDel(x.id);
       setConfirm(null);
     }
   });
@@ -127,6 +129,15 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
               <>
                 <p style={{ fontWeight: 500 }}>{s.name}</p>
                 <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>{euro(s.amount)} / {s.cycle}</p>
+              </>
+            )}
+          />
+          <Section title="Frais" items={tBizExp}
+            onRestore={id => bizExpenseA.restore(id)} onHardDel={id => bizExpenseA.hardDel(id)}
+            renderRow={e => (
+              <>
+                <p style={{ fontWeight: 500 }}>{e.label}</p>
+                <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>{euro(e.amount)} · {e.date}</p>
               </>
             )}
           />

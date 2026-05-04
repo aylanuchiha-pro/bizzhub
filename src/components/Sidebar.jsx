@@ -8,6 +8,7 @@ export const NAV = [
   { id: "rentals",       l: "Locations",          ic: "🚗" },
   { id: "partners",      l: "Partenaires",        ic: "◈" },
   { id: "subscriptions", l: "Abonnements",        ic: "↻" },
+  { id: "bizexpenses",   l: "Frais",              ic: "⊖" },
   { id: "businesses",    l: "Activités",          ic: "◇" },
   { id: "trash",         l: "Corbeille",          ic: "◌" },
 ];

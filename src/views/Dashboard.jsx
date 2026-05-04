@@ -1,46 +1,143 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { euro, pct, active, MO, cycleMonthly, diffDays, LOW, SIZES } from "../utils";
 import { KPI, Card, Empty, Bdg, ChartTip } from "../components/ui";
 
-export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBookings, subs }) {
+const PERIODS = [
+  { id: "all",    l: "Tout" },
+  { id: "month",  l: "Ce mois" },
+  { id: "3m",     l: "3 mois" },
+  { id: "year",   l: "Cette année" },
+  { id: "custom", l: "Personnalisé" },
+];
+
+const szStock = p => p.sizes && SIZES.some(s => (p.sizes[s] || 0) > 0)
+  ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0)
+  : (p.stock || 0);
+
+export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBookings, subs, expenses, bizExpenses }) {
+  const [period,   setPeriod]   = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo,   setDateTo]   = useState("");
+  const [selBiz,   setSelBiz]   = useState("all");
+
   const aBiz      = active(biz);
   const aSales    = active(sales);
   const aProds    = active(prods);
   const aAssets   = active(rentalAssets);
   const aBookings = active(rentalBookings);
   const aSubs     = active(subs).filter(s => s.active);
+  const aExpenses    = expenses || [];
+  const aBizExpenses = active(bizExpenses || []);
+
+  const { from, to } = useMemo(() => {
+    const now = new Date();
+    if (period === "month") {
+      const f = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: f.toISOString().split("T")[0], to: now.toISOString().split("T")[0] };
+    }
+    if (period === "3m") {
+      const f = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      return { from: f.toISOString().split("T")[0], to: now.toISOString().split("T")[0] };
+    }
+    if (period === "year") {
+      const f = new Date(now.getFullYear(), 0, 1);
+      return { from: f.toISOString().split("T")[0], to: now.toISOString().split("T")[0] };
+    }
+    if (period === "custom") return { from: dateFrom, to: dateTo };
+    return { from: "", to: "" };
+  }, [period, dateFrom, dateTo]);
+
+  const fSales = useMemo(() => {
+    let s = aSales;
+    if (from) s = s.filter(x => x.date >= from);
+    if (to)   s = s.filter(x => x.date <= to);
+    if (selBiz !== "all") s = s.filter(x => x.bizId === selBiz);
+    return s;
+  }, [aSales, from, to, selBiz]);
+
+  const fBookings = useMemo(() => {
+    let b = aBookings;
+    if (from) b = b.filter(x => (x.startDate || "") >= from);
+    if (to)   b = b.filter(x => (x.startDate || "") <= to);
+    if (selBiz !== "all") {
+      const ids = aAssets.filter(a => a.bizId === selBiz).map(a => a.id);
+      b = b.filter(x => ids.includes(x.assetId));
+    }
+    return b;
+  }, [aBookings, aAssets, from, to, selBiz]);
+
+  const fProds = useMemo(() => {
+    if (selBiz === "all") return aProds;
+    return aProds.filter(x => x.bizId === selBiz);
+  }, [aProds, selBiz]);
+
+  const fExpenses = useMemo(() => {
+    let e = aExpenses;
+    if (from) e = e.filter(x => x.date >= from);
+    if (to)   e = e.filter(x => x.date <= to);
+    if (selBiz !== "all") {
+      const ids = aProds.filter(p => p.bizId === selBiz).map(p => p.id);
+      e = e.filter(x => ids.includes(x.productId));
+    }
+    return e;
+  }, [aExpenses, aProds, from, to, selBiz]);
+
+  const fBizExpenses = useMemo(() => {
+    let e = aBizExpenses;
+    if (from) e = e.filter(x => x.date >= from);
+    if (to)   e = e.filter(x => x.date <= to);
+    if (selBiz !== "all") {
+      const bizProdIds = aProds.filter(p => p.bizId === selBiz).map(p => p.id);
+      e = e.filter(x => x.bizId === selBiz || bizProdIds.includes(x.productId));
+    }
+    return e;
+  }, [aBizExpenses, aProds, from, to, selBiz]);
+
+  const fSubs = useMemo(() => {
+    if (selBiz === "all") return aSubs;
+    return aSubs.filter(x => !x.bizId || x.bizId === selBiz);
+  }, [aSubs, selBiz]);
 
   const bizName  = id => aBiz.find(b => b.id === id)?.name ?? "—";
   const bizColor = id => aBiz.find(b => b.id === id)?.color ?? "var(--mut)";
 
   const stats = useMemo(() => {
     const saleAmt = s => s.paymentStatus === "acompte" ? (s.depositAmount || 0) : s.sellPrice * s.qty;
-    const salesCa     = aSales.reduce((a, s) => a + saleAmt(s), 0);
-    const salesProfit = aSales.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
-    const rentalCa    = aBookings.reduce((a, b) => a + b.sellPrice, 0);
-    const rentalPropCost = aBookings.reduce((a, b) => {
+
+    const salesCa     = fSales.reduce((a, s) => a + saleAmt(s), 0);
+    const salesProfit = fSales.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0);
+
+    const rentalCa       = fBookings.reduce((a, b) => a + b.sellPrice, 0);
+    const rentalPropCost = fBookings.reduce((a, b) => {
       const asset = aAssets.find(x => x.id === b.assetId);
       const days  = diffDays(b.startDate, b.endDate) || 0;
       return a + (asset ? (asset.monthlyCost / 30) * days : 0);
     }, 0);
     const rentalProfit = rentalCa - rentalPropCost;
 
-    const totalCa     = salesCa + rentalCa;
-    const totalProfit = salesProfit + rentalProfit;
-    const monthlyCharges = aSubs.reduce((a, s) => a + cycleMonthly(s.amount, s.cycle), 0);
-    const netProfit   = totalProfit - monthlyCharges;
+    const totalCa      = salesCa + rentalCa;
+    const totalProfit  = salesProfit + rentalProfit;
+    const monthlyCharges = fSubs.reduce((a, s) => a + cycleMonthly(s.amount, s.cycle), 0);
+    const netProfit    = totalProfit - monthlyCharges;
+
+    // Trésorerie = argent reçu - coût de toutes les ventes (acompte inclus) - stock immobilisé - dépenses
+    const allSalesCost    = fSales.reduce((a, s) => a + s.costPrice * s.qty, 0);
+    const stockValue      = fProds.filter(p => p.category === "physical").reduce((a, p) => a + szStock(p) * (p.buyPrice || 0), 0);
+    const expensesTotal   = fExpenses.reduce((a, e) => a + (e.amount || 0), 0);
+    const bizExpTotal     = fBizExpenses.reduce((a, e) => a + (e.amount || 0), 0);
+    const tresorerie      = salesCa + rentalCa - allSalesCost - rentalPropCost - stockValue - expensesTotal - bizExpTotal;
 
     const byBiz = aBiz.map(b => {
-      const bs = aSales.filter(s => s.bizId === b.id);
-      const ba = aAssets.filter(a => a.bizId === b.id);
+      const bs    = fSales.filter(s => s.bizId === b.id);
+      const ba    = aAssets.filter(a => a.bizId === b.id);
       const baIds = ba.map(a => a.id);
-      const bbk = aBookings.filter(b_ => baIds.includes(b_.assetId));
-      const ca = bs.reduce((a, s) => a + saleAmt(s), 0) + bbk.reduce((a, b_) => a + b_.sellPrice, 0);
+      const bbk   = fBookings.filter(b_ => baIds.includes(b_.assetId));
+      const ca    = bs.reduce((a, s) => a + saleAmt(s), 0) + bbk.reduce((a, b_) => a + b_.sellPrice, 0);
       const profit = bs.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
         bbk.reduce((a, b_) => {
           const asset = aAssets.find(x => x.id === b_.assetId);
-          const days = diffDays(b_.startDate, b_.endDate) || 0;
+          const days  = diffDays(b_.startDate, b_.endDate) || 0;
           return a + (b_.sellPrice - (asset ? (asset.monthlyCost / 30) * days : 0));
         }, 0);
       return { name: b.name, color: b.color, ca, profit };
@@ -50,38 +147,80 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
     const monthly = Array.from({ length: 6 }, (_, i) => {
       const d   = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const ms  = aSales.filter(s => s.date?.startsWith(key));
-      const mbk = aBookings.filter(b => (b.startDate || "").startsWith(key));
+      const ms  = fSales.filter(s => s.date?.startsWith(key));
+      const mbk = fBookings.filter(b => (b.startDate || "").startsWith(key));
       return {
         name:   MO[d.getMonth()],
         ca:     ms.reduce((a, s) => a + saleAmt(s), 0) + mbk.reduce((a, b) => a + b.sellPrice, 0),
         profit: ms.filter(s => s.paymentStatus !== "acompte").reduce((a, s) => a + (s.sellPrice - s.costPrice) * s.qty, 0) +
           mbk.reduce((a, b_) => {
             const asset = aAssets.find(x => x.id === b_.assetId);
-            const days = diffDays(b_.startDate, b_.endDate) || 0;
+            const days  = diffDays(b_.startDate, b_.endDate) || 0;
             return a + (b_.sellPrice - (asset ? (asset.monthlyCost / 30) * days : 0));
           }, 0),
       };
     });
 
-    const szStock = p => p.sizes && SIZES.some(s => (p.sizes[s] || 0) > 0)
-      ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0)
-      : (p.stock || 0);
     const lowStock = aProds
       .filter(p => p.category === "physical" && szStock(p) <= LOW)
       .map(p => ({ ...p, _stock: szStock(p) }));
-    return { totalCa, totalProfit, netProfit, monthlyCharges, count: aSales.length, prodCount: aProds.length, byBiz, monthly, lowStock };
-  }, [aSales, aBookings, aAssets, aProds, aBiz, aSubs]);
 
-  const recent = [...aSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+    return { totalCa, totalProfit, netProfit, monthlyCharges, stockValue, expensesTotal, bizExpTotal, tresorerie, byBiz, monthly, lowStock };
+  }, [fSales, fBookings, aAssets, fProds, aBiz, fSubs, fExpenses, fBizExpenses]);
+
+  const recent = [...fSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  const btnPill = (active, color) => ({
+    padding: "5px 13px",
+    borderRadius: 20,
+    border: `1px solid ${active ? (color || "var(--ac)") : "var(--brd)"}`,
+    background: active ? (color ? color + "22" : "var(--acb)") : "transparent",
+    color: active ? (color || "var(--ac)") : "var(--sub)",
+    fontSize: 12,
+    fontWeight: active ? 600 : 400,
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  });
 
   return (
     <div>
+      {/* ── Filtres ── */}
+      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          {PERIODS.map(p => (
+            <button key={p.id} style={btnPill(period === p.id)} onClick={() => setPeriod(p.id)}>{p.l}</button>
+          ))}
+        </div>
+
+        {period === "custom" && (
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--tx)" }} />
+            <span style={{ fontSize: 11, color: "var(--mut)" }}>→</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--tx)" }} />
+          </div>
+        )}
+
+        {aBiz.length > 0 && (
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", borderLeft: "1px solid var(--brd)", paddingLeft: 10 }}>
+            <button style={btnPill(selBiz === "all")} onClick={() => setSelBiz("all")}>Toutes</button>
+            {aBiz.map(b => (
+              <button key={b.id} style={btnPill(selBiz === b.id, b.color)} onClick={() => setSelBiz(selBiz === b.id ? "all" : b.id)}>
+                {b.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── KPIs ── */}
       <div className="kpis" style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <KPI label="Chiffre d'affaires" value={euro(stats.totalCa)} color="var(--ac)" top />
         <KPI label="Bénéfice brut" value={euro(stats.totalProfit)} color={stats.totalProfit >= 0 ? "var(--ok)" : "var(--err)"} sub={`Marge : ${pct(stats.totalProfit, stats.totalCa)}`} />
-        <KPI label="Charges mensuelles" value={euro(stats.monthlyCharges)} color="var(--warn)" sub={`${aSubs.length} abonnement(s) actif(s)`} />
+        <KPI label="Charges mensuelles" value={euro(stats.monthlyCharges)} color="var(--warn)" sub={`${fSubs.length} abonnement(s) actif(s)`} />
         <KPI label="Bénéfice net" value={euro(stats.netProfit)} color={stats.netProfit >= 0 ? "var(--ok)" : "var(--err)"} sub="après charges récurrentes" />
+        <KPI label="Trésorerie réelle" value={euro(stats.tresorerie)} color={stats.tresorerie >= 0 ? "var(--ok)" : "var(--err)"} sub={`Stock : ${euro(stats.stockValue)} · Frais : ${euro(stats.bizExpTotal + stats.expensesTotal)}`} />
       </div>
 
       <div className="cg2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 14 }}>

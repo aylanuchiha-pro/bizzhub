@@ -294,16 +294,32 @@ const SizesBadges = ({ p }) => {
 const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
   const hasSz = hasSizes(product);
   const availSizes = hasSz ? SIZES.filter(s => (product.sizes[s] || 0) > 0) : [];
-  const [qty, setQty] = useState("1");
-  const [price, setPrice] = useState(String(product.sellPrice));
-  const [date, setDate] = useState(today());
-  const [notes, setNotes] = useState("");
-  const [selSize, setSelSize] = useState(availSizes[0] || "");
-  const qN = Math.max(1, parseInt(qty) || 1);
-  const pN = parseFloat(price) || 0;
+  const [qty,           setQty]           = useState("1");
+  const [price,         setPrice]         = useState(String(product.sellPrice));
+  const [date,          setDate]          = useState(today());
+  const [notes,         setNotes]         = useState("");
+  const [selSize,       setSelSize]       = useState(availSizes[0] || "");
+  const [isDeposit,     setIsDeposit]     = useState(false);
+  const [depositAmount, setDepositAmount] = useState("");
+
+  const qN    = Math.max(1, parseInt(qty) || 1);
+  const pN    = parseFloat(price) || 0;
+  const depN  = parseFloat(depositAmount) || 0;
   const profit = (pN - totalCost) * qN;
+  const remaining = pN * qN - depN;
   const sizeStock = hasSz && selSize ? (product.sizes[selSize] || 0) : product.stock;
   const over = product.category === "physical" && qN > sizeStock;
+
+  const confirm = () => {
+    if (over || pN <= 0) return;
+    onConfirm({
+      qty: qN, sellPrice: pN, date, notes,
+      size: hasSz ? selSize : null,
+      paymentStatus: isDeposit ? "acompte" : "complet",
+      depositAmount: isDeposit ? depN : 0,
+    });
+  };
+
   return (
     <Modal title={`Vendre — ${product.name}`} onClose={onClose} width={420}>
       {product.category === "physical" && (
@@ -331,10 +347,40 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
         <F label="Prix de vente unitaire (€)"><input type="number" value={price} onChange={e => setPrice(e.target.value)} /></F>
         <F label="Date"><input type="date" value={date} onChange={e => setDate(e.target.value)} /></F>
         <F label="Notes"><input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Client, référence…" /></F>
-        {pN > 0 && <Preview ca={pN * qN} profit={profit} margin={pct(profit, pN * qN)} />}
+
+        <div style={{ padding: "12px 14px", background: isDeposit ? "rgba(217,119,6,.06)" : "var(--surf)", border: `1px solid ${isDeposit ? "rgba(217,119,6,.3)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
+            <input type="checkbox" checked={isDeposit} onChange={e => { setIsDeposit(e.target.checked); if (!e.target.checked) setDepositAmount(""); }} style={{ width: 15, height: 15, cursor: "pointer" }} />
+            <span style={{ color: isDeposit ? "var(--warn)" : "var(--sub)" }}>Acompte reçu (paiement partiel)</span>
+          </label>
+          {isDeposit && (
+            <div style={{ marginTop: 10, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <F label="Montant de l'acompte (€)">
+                <input type="number" value={depositAmount} onChange={e => setDepositAmount(e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" style={{ maxWidth: 160 }} />
+              </F>
+              {depN > 0 && pN > 0 && (
+                <p style={{ fontSize: 12, color: "var(--warn)", paddingBottom: 2 }}>
+                  Reste à encaisser : <strong>{euro(remaining)}</strong>
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {pN > 0 && !isDeposit && <Preview ca={pN * qN} profit={profit} margin={pct(profit, pN * qN)} />}
+        {pN > 0 && isDeposit && depN > 0 && (
+          <div style={{ padding: "12px 14px", background: "var(--acb)", borderRadius: 8, border: "1px solid rgba(79,70,229,.2)", fontSize: 12 }}>
+            <div style={{ display: "flex", gap: 24 }}>
+              <div><p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em" }}>CA total</p><p style={{ fontWeight: 600, color: "var(--ac)" }}>{euro(pN * qN)}</p></div>
+              <div><p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em" }}>Acompte</p><p style={{ fontWeight: 600, color: "var(--warn)" }}>{euro(depN)}</p></div>
+              <div><p style={{ fontSize: 10, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".06em" }}>Reste dû</p><p style={{ fontWeight: 600, color: "var(--err)" }}>{euro(remaining)}</p></div>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <Btn onClick={onClose}>Annuler</Btn>
-          <Btn variant="pri" onClick={() => !over && onConfirm({ qty: qN, sellPrice: pN, date, notes, size: hasSz ? selSize : null })} disabled={over || pN <= 0}>Enregistrer</Btn>
+          <Btn variant="pri" onClick={confirm} disabled={over || pN <= 0 || (isDeposit && depN <= 0)}>Enregistrer</Btn>
         </div>
       </div>
     </Modal>
@@ -342,12 +388,15 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
 };
 
 // ─── Modal frais (mobile) ─────────────────────────────────────────
-const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
-  const [label, setLabel] = useState("");
-  const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(today());
-  const prodExpenses = expenses.filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalExtra = prodExpenses.reduce((a, e) => a + e.amount, 0);
+const ExpensesModal = ({ product, expenses, onAdd, onDel, bizExpenses, bizExpenseA, onClose }) => {
+  const [label,   setLabel]   = useState("");
+  const [amount,  setAmount]  = useState("");
+  const [date,    setDate]    = useState(today());
+  const [confirm, setConfirm] = useState(null);
+  const prodExpenses  = expenses.filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const bizProdExp    = active(bizExpenses || []).filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const allExpenses   = [...prodExpenses.map(e => ({ ...e, _src: "prod" })), ...bizProdExp.map(e => ({ ...e, _src: "biz" }))].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalExtra = allExpenses.reduce((a, e) => a + e.amount, 0);
   const add = () => {
     const a = parseFloat(amount);
     if (!label.trim() || !a || a <= 0) return;
@@ -364,13 +413,16 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
           </div>
         ))}
       </div>
-      {prodExpenses.length === 0 ? <p style={{ fontSize: 13, color: "var(--mut)", textAlign: "center", padding: "20px 0 24px" }}>Aucun frais enregistré.</p> : (
+      {allExpenses.length === 0 ? <p style={{ fontSize: 13, color: "var(--mut)", textAlign: "center", padding: "20px 0 24px" }}>Aucun frais enregistré.</p> : (
         <div style={{ marginBottom: 20, border: "1px solid var(--brd)", borderRadius: 10, overflow: "hidden" }}>
-          {prodExpenses.map((e, i) => (
-            <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderTop: i > 0 ? "1px solid var(--brd)" : "none" }}>
-              <div style={{ flex: 1 }}><p style={{ fontSize: 13, fontWeight: 500 }}>{e.label}</p><p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>{fmtDate(e.date)}</p></div>
+          {allExpenses.map((e, i) => (
+            <div key={e.id + e._src} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderTop: i > 0 ? "1px solid var(--brd)" : "none" }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 500 }}>{e.label}</p>
+                <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>{fmtDate(e.date)}</p>
+              </div>
               <p style={{ fontWeight: 600, color: "var(--warn)" }}>+{euro(e.amount)}</p>
-              <Btn sm variant="err" onClick={() => onDel(e.id)}>×</Btn>
+              <Btn sm variant="err" onClick={() => setConfirm({ msg: `Supprimer le frais "${e.label}" ?`, onOk: () => { e._src === "biz" ? bizExpenseA.softDel(e.id) : onDel(e.id); setConfirm(null); } })}>×</Btn>
             </div>
           ))}
         </div>
@@ -387,6 +439,7 @@ const ExpensesModal = ({ product, expenses, onAdd, onDel, onClose }) => {
         </div>
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}><Btn onClick={onClose}>Fermer</Btn></div>
+      {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
     </Modal>
   );
 };
@@ -402,18 +455,21 @@ const Section = ({ title, children, right }) => (
   </div>
 );
 
-const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
+const ModifyModal = ({ product, aBiz, expenses, expenseA, bizExpenses, bizExpenseA, prodA, onClose }) => {
   const vehicleInit = parseVehicleDesc(product.description) || emptyVehicleFields;
   const [form, setForm] = useState({ ...product, buyPrice: String(product.buyPrice), sellPrice: String(product.sellPrice), stock: String(product.stock), sizes: product.sizes || null, images: product.images || [], ...vehicleInit });
   const [confirmDel, setConfirmDel] = useState(false);
+  const [confirmExp, setConfirmExp] = useState(null);
   const [pendingDeletes, setPendingDeletes] = useState([]);
   const [expLabel, setExpLabel] = useState("");
   const [expAmount, setExpAmount] = useState("");
   const [expDate, setExpDate] = useState(today());
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const prodExpenses = expenses.filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalExtra = prodExpenses.reduce((a, e) => a + e.amount, 0);
+  const prodExpenses  = expenses.filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const bizProdExp    = active(bizExpenses || []).filter(e => e.productId === product.id).sort((a, b) => (a.date < b.date ? 1 : -1));
+  const allProdExp    = [...prodExpenses.map(e => ({ ...e, _src: "prod" })), ...bizProdExp.map(e => ({ ...e, _src: "biz" }))].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalExtra = allProdExp.reduce((a, e) => a + e.amount, 0);
   const basePrice = parseFloat(form.buyPrice) || 0;
   const totalCostVal = basePrice + totalExtra;
 
@@ -493,13 +549,16 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
           </div>
         }
       >
-        {prodExpenses.length > 0 && (
+        {allProdExp.length > 0 && (
           <div style={{ border: "1px solid var(--brd)", borderRadius: 10, overflow: "hidden", marginBottom: 12 }}>
-            {prodExpenses.map((e, i) => (
-              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderTop: i > 0 ? "1px solid var(--brd)" : "none" }}>
-                <div style={{ flex: 1 }}><p style={{ fontSize: 13, fontWeight: 500 }}>{e.label}</p><p style={{ fontSize: 11, color: "var(--mut)" }}>{fmtDate(e.date)}</p></div>
+            {allProdExp.map((e, i) => (
+              <div key={e.id + e._src} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderTop: i > 0 ? "1px solid var(--brd)" : "none" }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 500 }}>{e.label}</p>
+                  <p style={{ fontSize: 11, color: "var(--mut)" }}>{fmtDate(e.date)}</p>
+                </div>
                 <p style={{ fontWeight: 600, color: "var(--warn)" }}>+{euro(e.amount)}</p>
-                <Btn sm variant="err" onClick={() => expenseA.hardDel(e.id)}>×</Btn>
+                <Btn sm variant="err" onClick={() => setConfirmExp({ msg: `Supprimer le frais "${e.label}" ?`, onOk: () => { e._src === "biz" ? bizExpenseA.softDel(e.id) : expenseA.hardDel(e.id); setConfirmExp(null); } })}>×</Btn>
               </div>
             ))}
           </div>
@@ -530,12 +589,13 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, prodA, onClose }) => {
           <Btn variant="pri" onClick={save} disabled={!form.name.trim() || !form.bizId}>Enregistrer</Btn>
         </div>
       </div>
+      {confirmExp && <Confirm {...confirmExp} onCancel={() => setConfirmExp(null)} />}
     </Modal>
   );
 };
 
 // ─── Vue principale ───────────────────────────────────────────────────
-export default function Products({ prods, prodA, biz, sales, saleA, expenses, expenseA }) {
+export default function Products({ prods, prodA, biz, sales, saleA, expenses, expenseA, bizExpenses, bizExpenseA }) {
   const [prodModal, setProdModal] = useState(null);   // "add" | null  (mobile + add)
   const [modifyModal, setModifyModal] = useState(null); // product | null  (desktop Modifier)
   const [sellModal, setSellModal] = useState(null);
@@ -556,10 +616,13 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
   const bC = id => aBiz.find(b => b.id === id)?.color ?? "var(--mut)";
 
   const totalCost = p => {
-    const extra = (expenses || []).filter(e => e.productId === p.id).reduce((a, e) => a + e.amount, 0);
-    return p.buyPrice + extra;
+    const extra    = (expenses || []).filter(e => e.productId === p.id).reduce((a, e) => a + e.amount, 0);
+    const bizExtra = active(bizExpenses || []).filter(e => e.productId === p.id).reduce((a, e) => a + e.amount, 0);
+    return p.buyPrice + extra + bizExtra;
   };
-  const expCount = p => (expenses || []).filter(e => e.productId === p.id).length;
+  const expCount = p =>
+    (expenses || []).filter(e => e.productId === p.id).length +
+    active(bizExpenses || []).filter(e => e.productId === p.id).length;
 
   const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setPendingDeletes([]); setProdModal("add"); };
 
@@ -591,7 +654,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     setEditStock(null);
   };
 
-  const handleSell = (product, { qty, sellPrice, date, notes, size }) => {
+  const handleSell = (product, { qty, sellPrice, date, notes, size, paymentStatus, depositAmount }) => {
     if (product.category === "physical") {
       if (hasSizes(product) && size) {
         const newSizes = { ...product.sizes, [size]: Math.max(0, (product.sizes[size] || 0) - qty) };
@@ -601,7 +664,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
         prodA.update({ ...product, stock: Math.max(0, product.stock - qty) });
       }
     }
-    saleA.add({ id: uid(), bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: totalCost(product), date, notes, size: hasSizes(product) ? size : null, deletedAt: null });
+    saleA.add({ id: uid(), bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: totalCost(product), date, notes, size: hasSizes(product) ? size : null, paymentStatus: paymentStatus || "complet", depositAmount: depositAmount || 0, deletedAt: null });
     setSellModal(null);
   };
 
@@ -858,8 +921,8 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
       {/* ── Modals ── */}
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
       {sellModal && <SellModal product={sellModal} totalCost={totalCost(sellModal)} onConfirm={d => handleSell(sellModal, d)} onClose={() => setSellModal(null)} />}
-      {expModal && <ExpensesModal product={expModal} expenses={expenses || []} onAdd={expenseA.add} onDel={expenseA.hardDel} onClose={() => setExpModal(null)} />}
-      {modifyModal && <ModifyModal product={modifyModal} aBiz={aBiz} expenses={expenses || []} expenseA={expenseA} prodA={prodA} onClose={() => setModifyModal(null)} />}
+      {expModal && <ExpensesModal product={expModal} expenses={expenses || []} onAdd={expenseA.add} onDel={expenseA.hardDel} bizExpenses={bizExpenses} bizExpenseA={bizExpenseA} onClose={() => setExpModal(null)} />}
+      {modifyModal && <ModifyModal product={modifyModal} aBiz={aBiz} expenses={expenses || []} expenseA={expenseA} bizExpenses={bizExpenses} bizExpenseA={bizExpenseA} prodA={prodA} onClose={() => setModifyModal(null)} />}
 
       {/* Formulaire ajout + édition mobile */}
       {prodModal && (
