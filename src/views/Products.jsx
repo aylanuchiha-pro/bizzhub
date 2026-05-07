@@ -1,297 +1,15 @@
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect } from "react";
 import { uid, today, fmtDate, active, CATS, UNITS, SIZES, LOW, pct } from "../utils";
 import { euro } from "../utils";
-import { supabase } from "../supabase";
 import { Btn, Lbl, F, Bdg, CatBdg, Card, THead, Empty, Confirm, Modal, StockBar, Preview } from "../components/ui";
-
-// ─── Supabase Storage helpers ────────────────────────────────────
-const compressToBlob = (file, maxDim = 1200, quality = 0.82) => new Promise(res => {
-  const img = new Image();
-  const r = new FileReader();
-  r.onload = e => {
-    img.src = e.target.result;
-    img.onload = () => {
-      const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
-      const c = document.createElement("canvas");
-      c.width = Math.round(img.width * scale);
-      c.height = Math.round(img.height * scale);
-      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      c.toBlob(blob => res(blob), "image/jpeg", quality);
-    };
-  };
-  r.readAsDataURL(file);
-});
-
-const uploadImage = async (file) => {
-  const blob = await compressToBlob(file);
-  const path = `${uid()}.jpg`;
-  const { error } = await supabase.storage.from("product-images").upload(path, blob, { contentType: "image/jpeg" });
-  if (error) throw error;
-  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
-  return data.publicUrl;
-};
-
-const deleteStorageImage = async (url) => {
-  const marker = "/product-images/";
-  const idx = url.indexOf(marker);
-  if (idx === -1) return;
-  const path = url.slice(idx + marker.length);
-  await supabase.storage.from("product-images").remove([path]);
-};
-
-// ─── Sélecteur de photos ─────────────────────────────────────────
-const PhotosField = ({ images, onAdd, onRemove }) => {
-  const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState(null);
-
-  const handleFileChange = async (e) => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file) return;
-    setUploading(true);
-    setUploadErr(null);
-    try {
-      const url = await uploadImage(file);
-      onAdd(url);
-    } catch (err) {
-      console.error("[upload]", err);
-      setUploadErr(`Erreur : ${err?.message || "inconnue"}`);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        {images.map((url) => (
-          <div key={url} style={{ position: "relative", flexShrink: 0 }}>
-            <img src={url} alt="" style={{ width: 64, height: 64, borderRadius: 10, objectFit: "cover", border: "1px solid var(--brd)", display: "block" }} />
-            <button onClick={() => onRemove(url)} style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "var(--err)", border: "none", color: "#fff", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
-          </div>
-        ))}
-        {uploading && (
-          <div style={{ width: 64, height: 64, borderRadius: 10, border: "1px dashed var(--brd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, color: "var(--mut)" }}>⏳</div>
-        )}
-        {images.length < 5 && !uploading && (
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)", flexShrink: 0 }}>
-            <span>📷</span><span>{images.length === 0 ? "Ajouter des photos" : "Ajouter"}</span>
-            <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
-          </label>
-        )}
-      </div>
-      {uploadErr && <p style={{ fontSize: 11, color: "var(--err)", marginTop: 6 }}>{uploadErr}</p>}
-      {images.length > 0 && <p style={{ fontSize: 10, color: "var(--mut)", marginTop: 5 }}>{images.length}/5 — La 1ère photo est la photo principale</p>}
-    </div>
-  );
-};
-
-// ─── Constantes véhicule ─────────────────────────────────────────
-const VEHICLE_FUELS = ["Essence", "Diesel", "Hybride", "Électrique", "GPL"];
-const VEHICLE_TRANSMISSIONS = ["Manuelle", "Automatique"];
-const VEHICLE_CONDITIONS = ["Très bon état", "Bon état", "État correct", "À rénover"];
-
-const emptyVehicleFields = { isVehicle: false, vBrand: "", vYear: "", vMileage: "", vFuel: "Essence", vTransmission: "Manuelle", vColor: "", vCondition: "Bon état", vCt: "", vFreeDesc: "", available: false };
-
-// Détecte et parse une description au format véhicule "2010 | 112000 | Essence | …"
-function parseVehicleDesc(desc) {
-  if (!desc || !/^\d{4}\s*\|/.test(desc)) return null;
-  const parts = desc.split("|").map(s => s.trim());
-  return {
-    isVehicle: true,
-    vYear: parts[0] || "",
-    vMileage: parts[1] || "",
-    vFuel: parts[2] || "Essence",
-    vTransmission: parts[3] || "Manuelle",
-    vColor: parts[4] || "",
-    vCondition: parts[5] || "Bon état",
-    vCt: parts[6] || "",
-    vBrand: parts[7] || "",
-    vFreeDesc: parts.slice(8).join(" | ").trim(),
-  };
-}
-
-// Encode les champs véhicule vers la description pipe-séparée
-function encodeVehicleDesc(form) {
-  return [form.vYear, form.vMileage, form.vFuel, form.vTransmission, form.vColor, form.vCondition, form.vCt, form.vBrand, form.vFreeDesc]
-    .map(v => String(v || "").trim())
-    .join(" | ");
-}
-
-const CAR_BRANDS = [
-  "Audi", "BMW", "Citroën", "Dacia", "Fiat", "Ford", "Honda",
-  "Hyundai", "Kia", "Mazda", "Mercedes", "Mitsubishi", "Nissan",
-  "Opel", "Peugeot", "Renault", "Seat", "Skoda", "Suzuki",
-  "Tesla", "Toyota", "Volkswagen", "Volvo",
-];
-
-// ─── UI véhicule partagé ─────────────────────────────────────────
-const VehicleToggle = ({ form, set }) => (
-  <div style={{ gridColumn: "1/-1" }}>
-    <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
-      <input
-        type="checkbox"
-        checked={!!form.isVehicle}
-        onChange={e => set("isVehicle", e.target.checked)}
-        style={{ width: 15, height: 15, cursor: "pointer" }}
-      />
-      <span style={{ color: form.isVehicle ? "var(--ac)" : "var(--sub)", fontWeight: form.isVehicle ? 600 : 400 }}>
-        🚗 C'est un véhicule (Tixycars)
-      </span>
-    </label>
-  </div>
-);
-
-const VehicleFields = ({ form, set }) => {
-  const isCustom = !!form.vBrand && !CAR_BRANDS.includes(form.vBrand);
-  const [showCustom, setShowCustom] = useState(isCustom);
-  const selectValue = showCustom ? "Autre" : (form.vBrand || "");
-
-  const handleBrandSelect = e => {
-    if (e.target.value === "Autre") {
-      setShowCustom(true);
-      set("vBrand", "");
-    } else {
-      setShowCustom(false);
-      set("vBrand", e.target.value);
-    }
-  };
-
-  return (
-  <>
-    <div style={{ gridColumn: "1/-1", padding: "8px 12px", background: "rgba(79,70,229,.06)", border: "1px solid rgba(79,70,229,.2)", borderRadius: 8, fontSize: 12, color: "var(--ac)" }}>
-      Ces champs seront affichés sur le site Tixycars
-    </div>
-    <F label="Marque" col="1/-1">
-      <select value={selectValue} onChange={handleBrandSelect}>
-        <option value="">— Choisir une marque —</option>
-        {CAR_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-        <option value="Autre">Autre</option>
-      </select>
-      {showCustom && (
-        <input
-          autoFocus
-          value={form.vBrand}
-          onChange={e => set("vBrand", e.target.value)}
-          placeholder="Ex: Lamborghini, Ferrari…"
-          style={{ marginTop: 8 }}
-        />
-      )}
-    </F>
-    <F label="Année"><input type="number" value={form.vYear} onChange={e => set("vYear", e.target.value)} placeholder="2010" /></F>
-    <F label="Kilométrage (km)"><input type="number" value={form.vMileage} onChange={e => set("vMileage", e.target.value)} placeholder="112000" /></F>
-    <F label="Carburant">
-      <select value={form.vFuel} onChange={e => set("vFuel", e.target.value)}>
-        {VEHICLE_FUELS.map(f => <option key={f}>{f}</option>)}
-      </select>
-    </F>
-    <F label="Boîte">
-      <select value={form.vTransmission} onChange={e => set("vTransmission", e.target.value)}>
-        {VEHICLE_TRANSMISSIONS.map(t => <option key={t}>{t}</option>)}
-      </select>
-    </F>
-    <F label="Couleur"><input value={form.vColor} onChange={e => set("vColor", e.target.value)} placeholder="Rouge, Blanc métallisé…" /></F>
-    <F label="État">
-      <select value={form.vCondition} onChange={e => set("vCondition", e.target.value)}>
-        {VEHICLE_CONDITIONS.map(c => <option key={c}>{c}</option>)}
-      </select>
-    </F>
-    <F label="Contrôle technique" col="1/-1">
-      <input value={form.vCt} onChange={e => set("vCt", e.target.value)} placeholder="Valable 03/2026 · Non fait · À refaire" />
-    </F>
-    <F label="Description (travaux, options…)" col="1/-1">
-      <textarea value={form.vFreeDesc} onChange={e => set("vFreeDesc", e.target.value)} rows={3} style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} placeholder="Révision faite jan 2025, 4 pneus neufs, carnet d'entretien complet…" />
-    </F>
-    <div style={{ gridColumn: "1/-1", padding: "12px 14px", background: form.available ? "rgba(22,163,74,.07)" : "var(--surf)", border: `1px solid ${form.available ? "rgba(22,163,74,.35)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
-        <input type="checkbox" checked={!!form.available} onChange={e => set("available", e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#16a34a" }} />
-        <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: form.available ? "var(--ok)" : "var(--sub)" }}>
-            {form.available ? "✓ Disponible sur Tixycars" : "Marquer comme disponible sur Tixycars"}
-          </p>
-          <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>
-            {form.available ? "Ce véhicule est visible sur le site vitrine" : "Le véhicule ne sera pas affiché sur le site vitrine"}
-          </p>
-        </div>
-      </label>
-    </div>
-  </>
-  );
-};
-
-const emptyProd = { name: "", bizId: "", category: "physical", buyPrice: "", sellPrice: "", stock: "0", unit: "unité(s)", description: "", image: null, images: [], size: "", sizes: null, ...emptyVehicleFields };
-
-const hasSizes = p => p.sizes && typeof p.sizes === "object" && SIZES.some(s => (p.sizes[s] || 0) > 0);
-const totalSzStock = p => hasSizes(p) ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0) : (p.stock || 0);
-
-// ─── Sélecteur de tailles dans un formulaire ──────────────────────
-const SizesGrid = ({ sizes, onChange }) => (
-  <div style={{ gridColumn: "1/-1" }}>
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-      {SIZES.map(s => (
-        <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: "var(--ac)", letterSpacing: ".04em" }}>{s}</label>
-          <input
-            type="number"
-            min="0"
-            value={sizes[s] ?? 0}
-            onChange={e => onChange({ ...sizes, [s]: Math.max(0, parseInt(e.target.value) || 0) })}
-            style={{ width: 58, textAlign: "center", padding: "6px 4px" }}
-          />
-        </div>
-      ))}
-    </div>
-    <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 8 }}>
-      Total : <strong style={{ color: "var(--ac)" }}>{SIZES.reduce((a, s) => a + (sizes[s] || 0), 0)}</strong>
-    </p>
-  </div>
-);
-
-// ─── Toggle mode tailles dans formulaire ─────────────────────────
-const SizesToggle = ({ form, set, setForm }) => {
-  const enabled = !!form.sizes;
-  return (
-    <div style={{ gridColumn: "1/-1" }}>
-      <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={e => {
-            if (e.target.checked) {
-              const initSizes = Object.fromEntries(SIZES.map(s => [s, s === form.size && form.size ? parseInt(form.stock) || 0 : 0]));
-              setForm(f => ({ ...f, sizes: initSizes, size: "" }));
-            } else {
-              const total = SIZES.reduce((a, s) => a + (form.sizes?.[s] || 0), 0);
-              setForm(f => ({ ...f, sizes: null, stock: String(total) }));
-            }
-          }}
-          style={{ width: 15, height: 15, cursor: "pointer" }}
-        />
-        <span style={{ color: enabled ? "var(--ac)" : "var(--sub)", fontWeight: enabled ? 600 : 400 }}>
-          Gérer le stock par taille (S / M / L…)
-        </span>
-      </label>
-    </div>
-  );
-};
-
-// ─── Affichage badges tailles ─────────────────────────────────────
-const SizesBadges = ({ p }) => {
-  if (hasSizes(p)) {
-    return SIZES.filter(s => (p.sizes[s] || 0) > 0).map(s => (
-      <span key={s} style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>
-        {s}:{p.sizes[s]}
-      </span>
-    ));
-  }
-  if (p.size) {
-    return <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", background: "var(--acb)", border: "1px solid rgba(79,70,229,.25)", borderRadius: 5, color: "var(--ac)" }}>{p.size}</span>;
-  }
-  return null;
-};
+import ProductFormModal, {
+  deleteStorageImage, parseVehicleDesc, encodeVehicleDesc,
+  emptyVehicleFields, emptyProd, hasSizes, totalSzStock,
+  SizesBadges, PhotosField, VehicleToggle, VehicleFields, SizesGrid, SizesToggle,
+} from "../components/ProductFormModal";
 
 // ─── Modal vente ──────────────────────────────────────────────────
-const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
+const SellModal = ({ product, totalCost, aPartners, onConfirm, onClose }) => {
   const hasSz = hasSizes(product);
   const availSizes = hasSz ? SIZES.filter(s => (product.sizes[s] || 0) > 0) : [];
   const [qty,           setQty]           = useState("1");
@@ -301,6 +19,9 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
   const [selSize,       setSelSize]       = useState(availSizes[0] || "");
   const [isDeposit,     setIsDeposit]     = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
+  const [withPartner,   setWithPartner]   = useState(false);
+  const [partnerId,     setPartnerId]     = useState("");
+  const [sharePct,      setSharePct]      = useState("50");
 
   const qN    = Math.max(1, parseInt(qty) || 1);
   const pN    = parseFloat(price) || 0;
@@ -317,6 +38,9 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
       size: hasSz ? selSize : null,
       paymentStatus: isDeposit ? "acompte" : "complet",
       depositAmount: isDeposit ? depN : 0,
+      withPartner: withPartner && !!partnerId,
+      partnerId,
+      sharePct: parseFloat(sharePct) || 50,
     });
   };
 
@@ -347,6 +71,33 @@ const SellModal = ({ product, totalCost, onConfirm, onClose }) => {
         <F label="Prix de vente unitaire (€)"><input type="number" value={price} onChange={e => setPrice(e.target.value)} /></F>
         <F label="Date"><input type="date" value={date} onChange={e => setDate(e.target.value)} /></F>
         <F label="Notes"><input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Client, référence…" /></F>
+
+        {aPartners.length > 0 && (
+          <div style={{ padding: "12px 14px", background: "var(--surf)", borderRadius: 10, border: "1px solid var(--brd)" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+              <input type="checkbox" checked={withPartner} onChange={e => { setWithPartner(e.target.checked); if (!e.target.checked) setPartnerId(""); }} style={{ width: "auto", cursor: "pointer" }} />
+              Impliquer un partenaire
+            </label>
+            {withPartner && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
+                <F label="Partenaire">
+                  <select value={partnerId} onChange={e => setPartnerId(e.target.value)}>
+                    <option value="">— Choisir —</option>
+                    {aPartners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </F>
+                <F label="Sa part du bénéfice (%)">
+                  <input type="number" value={sharePct} onChange={e => setSharePct(e.target.value)} min="1" max="100" placeholder="50" />
+                </F>
+                {partnerId && pN > 0 && (
+                  <p style={{ gridColumn: "1/-1", fontSize: 12, color: "var(--warn)" }}>
+                    À verser : {euro((pN - totalCost) * qN * (parseFloat(sharePct) || 50) / 100)} ({sharePct}% du bénéfice)
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ padding: "12px 14px", background: isDeposit ? "rgba(217,119,6,.06)" : "var(--surf)", border: `1px solid ${isDeposit ? "rgba(217,119,6,.3)" : "var(--brd)"}`, borderRadius: 10, transition: "all .15s" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13 }}>
@@ -491,7 +242,6 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, bizExpenses, bizExpens
     setExpLabel(""); setExpAmount(""); setExpDate(today());
   };
 
-
   return (
     <Modal title={`Modifier — ${product.name}`} onClose={onClose} width={620}>
       {/* ── Informations ── */}
@@ -595,23 +345,35 @@ const ModifyModal = ({ product, aBiz, expenses, expenseA, bizExpenses, bizExpens
 };
 
 // ─── Vue principale ───────────────────────────────────────────────────
-export default function Products({ prods, prodA, biz, sales, saleA, expenses, expenseA, bizExpenses, bizExpenseA }) {
-  const [prodModal, setProdModal] = useState(null);   // "add" | null  (mobile + add)
+export default function Products({ prods, prodA, biz, sales, saleA, expenses, expenseA, bizExpenses, bizExpenseA, partners, spA, focusProduct, setFocusProduct }) {
+  const [prodModal, setProdModal] = useState(null);     // "add" | product | null
   const [modifyModal, setModifyModal] = useState(null); // product | null  (desktop Modifier)
   const [sellModal, setSellModal] = useState(null);
   const [expModal, setExpModal] = useState(null);       // mobile Frais
-  const [form, setForm] = useState(emptyProd);
   const [filterBiz, setFilterBiz] = useState("all");
   const [filterCat, setFilterCat] = useState("all");
   const [searchQ, setSearchQ] = useState("");
   const [editStock, setEditStock] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [confirm, setConfirm] = useState(null);
-  const [pendingDeletes, setPendingDeletes] = useState([]);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleExpand = id => setExpandedId(prev => prev === id ? null : id);
 
+  useEffect(() => {
+    if (!focusProduct) return;
+    setFilterBiz("all");
+    setSearchQ("");
+    setExpandedId(focusProduct);
+    const timer = setTimeout(() => {
+      const isMobile = window.innerWidth <= 760;
+      const el = document.getElementById(isMobile ? "prodm-" + focusProduct : "prodd-" + focusProduct);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFocusProduct?.(null);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [focusProduct]);
+
   const aBiz = active(biz);
+  const aPartners = active(partners || []);
   const bN = id => aBiz.find(b => b.id === id)?.name ?? "—";
   const bC = id => aBiz.find(b => b.id === id)?.color ?? "var(--mut)";
 
@@ -624,28 +386,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     (expenses || []).filter(e => e.productId === p.id).length +
     active(bizExpenses || []).filter(e => e.productId === p.id).length;
 
-  const openAdd = () => { setForm({ ...emptyProd, bizId: aBiz[0]?.id ?? "" }); setPendingDeletes([]); setProdModal("add"); };
-
-  const openEditMobile = p => {
-    const vehicleData = parseVehicleDesc(p.description) || emptyVehicleFields;
-    setForm({ ...p, buyPrice: String(p.buyPrice), sellPrice: String(p.sellPrice), stock: String(p.stock), sizes: p.sizes || null, images: p.images || [], ...vehicleData });
-    setPendingDeletes([]);
-    setProdModal(p);
-  };
-
-  const saveProd = () => {
-    if (!form.name.trim() || !form.bizId) return;
-    const computedStock = form.sizes
-      ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0)
-      : parseInt(form.stock) || 0;
-    const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
-    const prod = { ...form, description, id: typeof prodModal === "string" ? uid() : prodModal.id, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null, deletedAt: null };
-    if (typeof prodModal === "string") prodA.add(prod);
-    else prodA.update(prod);
-    pendingDeletes.forEach(deleteStorageImage);
-    setPendingDeletes([]);
-    setProdModal(null);
-  };
+  const openAdd = () => setProdModal("add");
 
   const confirmStock = id => {
     const p = active(prods).find(x => x.id === id);
@@ -654,7 +395,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     setEditStock(null);
   };
 
-  const handleSell = (product, { qty, sellPrice, date, notes, size, paymentStatus, depositAmount }) => {
+  const handleSell = (product, { qty, sellPrice, date, notes, size, paymentStatus, depositAmount, withPartner, partnerId, sharePct }) => {
     if (product.category === "physical") {
       if (hasSizes(product) && size) {
         const newSizes = { ...product.sizes, [size]: Math.max(0, (product.sizes[size] || 0) - qty) };
@@ -664,7 +405,13 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
         prodA.update({ ...product, stock: Math.max(0, product.stock - qty) });
       }
     }
-    saleA.add({ id: uid(), bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: totalCost(product), date, notes, size: hasSizes(product) ? size : null, paymentStatus: paymentStatus || "complet", depositAmount: depositAmount || 0, deletedAt: null });
+    const saleId = uid();
+    const tc = totalCost(product);
+    saleA.add({ id: saleId, bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: tc, date, notes, size: hasSizes(product) ? size : null, paymentStatus: paymentStatus || "complet", depositAmount: depositAmount || 0, deletedAt: null });
+    if (withPartner && partnerId) {
+      const profit = (sellPrice - tc) * qty;
+      spA.add({ id: uid(), saleId, partnerId, sharePct, amountDue: profit * sharePct / 100 });
+    }
     setSellModal(null);
   };
 
@@ -721,6 +468,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                       <Fragment key={p.id}>
                         {/* ─ Ligne compacte ─ */}
                         <tr
+                          id={"prodd-" + p.id}
                           onClick={() => toggleExpand(p.id)}
                           style={{ borderTop: "1px solid var(--brd)", cursor: "pointer", background: expanded ? "var(--surf)" : undefined, transition: "background .1s" }}
                           onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = "var(--surf)"; }}
@@ -840,7 +588,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
               const isLow = p.category === "physical" && stockTotal <= LOW;
               const expanded = expandedId === p.id;
               return (
-                <div key={p.id} style={{ background: "var(--w)", border: `1px solid ${expanded ? "var(--ac)" : "var(--brd)"}`, borderRadius: 14, overflow: "hidden", boxShadow: "var(--sh)", transition: "border-color .15s" }}>
+                <div key={p.id} id={"prodm-" + p.id} style={{ background: "var(--w)", border: `1px solid ${expanded ? "var(--ac)" : "var(--brd)"}`, borderRadius: 14, overflow: "hidden", boxShadow: "var(--sh)", transition: "border-color .15s" }}>
                   <button onClick={() => toggleExpand(p.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, padding: "12px 13px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                     {p.images?.[0]
                       ? <img src={p.images[0]} alt="" style={{ width: 42, height: 42, borderRadius: 8, objectFit: "cover", border: "1px solid var(--brd)", flexShrink: 0 }} />
@@ -905,7 +653,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 12 }}>
                         <Btn variant="success" onClick={() => setSellModal(p)} full>Vendre</Btn>
                         <Btn variant="warn" onClick={() => setExpModal(p)} full>Frais{ec > 0 ? ` (${ec})` : ""}</Btn>
-                        <Btn variant="ghost" onClick={() => openEditMobile(p)} full>Éditer</Btn>
+                        <Btn variant="ghost" onClick={() => setProdModal(p)} full>Éditer</Btn>
                         <Btn variant="err" onClick={() => setConfirm({ msg: `Supprimer "${p.name}" ?`, sub: "Il sera déplacé dans la corbeille pendant 30 jours.", onOk: () => { prodA.softDel(p.id); setExpandedId(null); setConfirm(null); } })} full>Supprimer</Btn>
                       </div>
                     </>
@@ -920,57 +668,18 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
 
       {/* ── Modals ── */}
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
-      {sellModal && <SellModal product={sellModal} totalCost={totalCost(sellModal)} onConfirm={d => handleSell(sellModal, d)} onClose={() => setSellModal(null)} />}
+      {sellModal && <SellModal product={sellModal} totalCost={totalCost(sellModal)} aPartners={aPartners} onConfirm={d => handleSell(sellModal, d)} onClose={() => setSellModal(null)} />}
       {expModal && <ExpensesModal product={expModal} expenses={expenses || []} onAdd={expenseA.add} onDel={expenseA.hardDel} bizExpenses={bizExpenses} bizExpenseA={bizExpenseA} onClose={() => setExpModal(null)} />}
       {modifyModal && <ModifyModal product={modifyModal} aBiz={aBiz} expenses={expenses || []} expenseA={expenseA} bizExpenses={bizExpenses} bizExpenseA={bizExpenseA} prodA={prodA} onClose={() => setModifyModal(null)} />}
 
-      {/* Formulaire ajout + édition mobile */}
       {prodModal && (
-        <Modal title={typeof prodModal === "string" ? "Nouveau produit" : "Modifier le produit"} onClose={() => setProdModal(null)}>
-          <div className="fg2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <F label="Nom" col="1/-1"><input value={form.name} onChange={e => set("name", e.target.value)} placeholder="ex: Peugeot 308, Prestation…" /></F>
-            <F label="Activité">
-              <select value={form.bizId} onChange={e => set("bizId", e.target.value)}>
-                <option value="">— Choisir —</option>
-                {aBiz.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </F>
-            <F label="Catégorie">
-              <select value={form.category} onChange={e => set("category", e.target.value)}>
-                {CATS.map(c => <option key={c.id} value={c.id}>{c.l}</option>)}
-              </select>
-            </F>
-            <F label="Prix d'achat (€)"><input type="number" value={form.buyPrice} onChange={e => set("buyPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
-            <F label="Prix de vente (€)"><input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" /></F>
-            {form.category === "physical" && <>
-              {!form.sizes && (
-                <>
-                  <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} onFocus={e => e.target.select()} min="0" /></F>
-                  <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
-                </>
-              )}
-              <SizesToggle form={form} set={set} setForm={setForm} />
-              {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
-            </>}
-            <VehicleToggle form={form} set={set} />
-            {form.isVehicle
-              ? <VehicleFields form={form} set={set} />
-              : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
-            }
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Lbl>Photos (max 5)</Lbl>
-            <PhotosField
-              images={form.images || []}
-              onAdd={url => set("images", [...(form.images || []), url])}
-              onRemove={url => { set("images", (form.images || []).filter(u => u !== url)); setPendingDeletes(p => [...p, url]); }}
-            />
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
-            <Btn onClick={() => setProdModal(null)}>Annuler</Btn>
-            <Btn variant="pri" onClick={saveProd} disabled={!form.name.trim() || !form.bizId}>Enregistrer</Btn>
-          </div>
-        </Modal>
+        <ProductFormModal
+          product={typeof prodModal === "string" ? null : prodModal}
+          aBiz={aBiz}
+          prodA={prodA}
+          defaultBizId={aBiz[0]?.id}
+          onClose={() => setProdModal(null)}
+        />
       )}
     </div>
   );

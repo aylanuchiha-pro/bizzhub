@@ -34,6 +34,10 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:${dark ? "invert(.8)"
 .mhide{display:none!important}
 .mshow{display:flex!important}
 .m-only{display:flex!important;flex-direction:column;gap:12px}
+.pills{overflow-x:auto;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.pills::-webkit-scrollbar{display:none}
+.filter-bar{flex-direction:column!important;align-items:stretch!important}
+.filter-bar .pills{border-left:none!important;padding-left:0!important}
 }
 @media(min-width:761px){
 .mshow{display:none!important}

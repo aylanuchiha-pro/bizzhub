@@ -5,7 +5,8 @@ import { Btn, Lbl, F, Bdg, Card, THead, Empty, Confirm, ConfirmAcompte, Preview,
 
 const emptySale = { bizId: "", productId: "", name: "", qty: "1", sellPrice: "", costPrice: "", date: today(), notes: "", size: "", withPartner: false, partnerId: "", sharePct: "50", paymentStatus: "complet", depositAmount: "" };
 
-const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
+const EditSaleModal = ({ sale, aBiz, aPartners, salePartners, spA, onClose, onSave }) => {
+  const existingSp = salePartners?.find(sp => sp.saleId === sale.id) ?? null;
   const [form, setForm] = useState({
     name: sale.name,
     bizId: sale.bizId,
@@ -16,6 +17,9 @@ const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
     notes: sale.notes || "",
     paymentStatus: sale.paymentStatus || "complet",
     depositAmount: sale.depositAmount ? String(sale.depositAmount) : "",
+    withPartner: !!existingSp,
+    partnerId: existingSp?.partnerId || "",
+    sharePct: existingSp ? String(existingSp.sharePct) : "50",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const sN = parseFloat(form.sellPrice) || 0;
@@ -23,10 +27,22 @@ const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
   const qN = parseInt(form.qty) || 1;
   const depN = parseFloat(form.depositAmount) || 0;
   const isDeposit = form.paymentStatus === "acompte";
+  const pN_ = id => aPartners?.find(p => p.id === id)?.name ?? "—";
 
   const save = () => {
     if (!form.name.trim() || !form.sellPrice) return;
     onSave({ ...sale, name: form.name.trim(), bizId: form.bizId, sellPrice: sN, costPrice: cN, qty: qN, date: form.date, notes: form.notes.trim(), paymentStatus: form.paymentStatus, depositAmount: isDeposit ? depN : 0 });
+    const profit = (sN - cN) * qN;
+    const pctVal = parseFloat(form.sharePct) || 50;
+    if (form.withPartner && form.partnerId) {
+      if (existingSp) {
+        spA.update({ ...existingSp, partnerId: form.partnerId, sharePct: pctVal, amountDue: profit * pctVal / 100 });
+      } else {
+        spA.add({ id: uid(), saleId: sale.id, partnerId: form.partnerId, sharePct: pctVal, amountDue: profit * pctVal / 100 });
+      }
+    } else if (existingSp) {
+      spA.hardDel(existingSp.id);
+    }
     onClose();
   };
 
@@ -57,6 +73,32 @@ const EditSaleModal = ({ sale, aBiz, onClose, onSave }) => {
           </div>
         )}
       </div>
+      {aPartners?.length > 0 && (
+        <div style={{ marginTop: 14, padding: "14px 16px", background: "var(--surf)", borderRadius: 8, border: "1px solid var(--brd)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, fontWeight: 500 }}>
+            <input type="checkbox" checked={form.withPartner} onChange={e => { set("withPartner", e.target.checked); if (!e.target.checked) set("partnerId", ""); }} style={{ width: "auto", cursor: "pointer" }} />
+            Impliquer un partenaire dans cette vente
+          </label>
+          {form.withPartner && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+              <F label="Partenaire">
+                <select value={form.partnerId} onChange={e => set("partnerId", e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {aPartners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </F>
+              <F label="Sa part du bénéfice (%)">
+                <input type="number" value={form.sharePct} onChange={e => set("sharePct", e.target.value)} min="1" max="100" placeholder="50" />
+              </F>
+              {form.partnerId && sN > 0 && (
+                <div style={{ gridColumn: "1/-1", fontSize: 12, color: "var(--warn)" }}>
+                  À verser à {pN_(form.partnerId)} : {euro((sN - cN) * qN * (parseFloat(form.sharePct) || 50) / 100)} ({form.sharePct}% du bénéfice)
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {sN > 0 && <Preview ca={sN * qN} profit={(sN - cN) * qN} margin={pct(sN - cN, sN)} />}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
         <Btn onClick={onClose}>Annuler</Btn>
@@ -90,7 +132,7 @@ const SoldeModal = ({ sale, onClose, onSolde }) => {
   );
 };
 
-export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, expenses }) {
+export default function Sales({ sales, saleA, prods, prodA, biz, partners, salePartners, spA, expenses }) {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptySale);
   const [filterBiz, setFilterBiz] = useState("all");
@@ -344,7 +386,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
       {/* Barre filtres + bouton */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
             {[{ id: "all", l: "Toutes" }, ...aBiz.map(b => ({ id: b.id, l: b.name }))].map(f => (
               <button key={f.id} onClick={() => setFilterBiz(f.id)} style={{ background: filterBiz === f.id ? "var(--acb)" : "transparent", border: `1px solid ${filterBiz === f.id ? "var(--ac)" : "var(--brd)"}`, color: filterBiz === f.id ? "var(--ac)" : "var(--sub)", borderRadius: 8, padding: "6px 13px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: filterBiz === f.id ? 600 : 400 }}>{f.l}</button>
             ))}
@@ -568,7 +610,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, spA, 
         ? <ConfirmAcompte {...confirm} onCancel={() => setConfirm(null)} />
         : <Confirm {...confirm} onCancel={() => setConfirm(null)} />
       )}
-      {editModal && <EditSaleModal sale={editModal} aBiz={aBiz} onClose={() => setEditModal(null)} onSave={s => saleA.update(s)} />}
+      {editModal && <EditSaleModal sale={editModal} aBiz={aBiz} aPartners={aPartners} salePartners={salePartners} spA={spA} onClose={() => setEditModal(null)} onSave={s => saleA.update(s)} />}
       {soldeModal && <SoldeModal sale={soldeModal} onClose={() => setSoldeModal(null)} onSolde={() => saleA.update({ ...soldeModal, paymentStatus: "complet", depositAmount: 0 })} />}
     </div>
   );

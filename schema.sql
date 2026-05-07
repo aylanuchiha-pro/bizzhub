@@ -130,6 +130,40 @@ create policy "own" on sale_partners for all using (auth.uid() = user_id) with c
 create policy "own" on partner_payments for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own" on subscriptions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Commandes fournisseur
+create table if not exists orders (
+  id text primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  biz_id text references businesses(id),
+  reference text not null,
+  supplier text,
+  order_date date not null,
+  expected_date date,
+  status text default 'en_attente',
+  notes text,
+  deleted_at timestamptz,
+  created_at timestamptz default now()
+);
+
+-- Lignes de commandes
+create table if not exists order_items (
+  id text primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  order_id text not null references orders(id) on delete cascade,
+  product_id text references products(id),
+  name text not null,
+  qty integer default 1,
+  unit_price numeric default 0,
+  size text,
+  notes text,
+  created_at timestamptz default now()
+);
+
+alter table orders enable row level security;
+alter table order_items enable row level security;
+create policy "own" on orders for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own" on order_items for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
 -- ================================================================
 -- Storage bucket pour les images produit (optionnel)
 -- Exécutez dans Storage > New bucket : "product-images" (public)

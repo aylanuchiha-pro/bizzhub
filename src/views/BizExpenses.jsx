@@ -89,7 +89,7 @@ export default function BizExpenses({ bizExpenses, bizExpenseA, biz, prods, expe
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+        <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
           <button style={btnPill(selBiz === "all")} onClick={() => setSelBiz("all")}>Toutes les activités</button>
           {aBiz.map(b => (
             <button key={b.id} style={btnPill(selBiz === b.id, b.color)} onClick={() => setSelBiz(selBiz === b.id ? "all" : b.id)}>

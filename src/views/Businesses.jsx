@@ -20,7 +20,7 @@ const ExpModal = ({ biz, bizExpenses, bizExpenseA, onClose }) => {
 
   return (
     <Modal title={`Frais — ${biz.name}`} onClose={onClose} width={520}>
-      <div style={{ display: "flex", gap: 0, background: b => b, borderRadius: 12, marginBottom: 20, border: "1px solid rgba(79,70,229,.15)", overflow: "hidden", background: "var(--acb)" }}>
+      <div style={{ display: "flex", gap: 0, background: "var(--acb)", borderRadius: 12, marginBottom: 20, border: "1px solid rgba(79,70,229,.15)", overflow: "hidden" }}>
         {[
           { l: "Total des frais", v: euro(totalExp), c: totalExp > 0 ? "var(--err)" : "var(--mut)" },
           { l: "Nombre de frais",  v: bizExp.length, c: "var(--sub)" },

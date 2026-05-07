@@ -1,10 +1,11 @@
 import { trashed, daysLeft, active } from "../utils";
 import { euro } from "../utils";
 import { Btn, Card, Empty, Confirm, SectionTitle, CatBdg } from "../components/ui";
+import { deleteStorageImage } from "../components/ProductFormModal";
 import { useState } from "react";
 import { BOOKING_STATUS } from "../utils";
 
-export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAssets, assetA, rentalBookings, bookingA, subs, subA, bizExpenses, bizExpenseA }) {
+export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAssets, assetA, rentalBookings, bookingA, subs, subA, bizExpenses, bizExpenseA, orders, orderA, deleteOrderHard }) {
   const [confirm, setConfirm] = useState(null);
 
   const tBiz       = trashed(biz);
@@ -14,19 +15,24 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
   const tBookings  = trashed(rentalBookings);
   const tSubs      = trashed(subs);
   const tBizExp    = trashed(bizExpenses || []);
-  const total      = tBiz.length + tProd.length + tSales.length + tAssets.length + tBookings.length + tSubs.length + tBizExp.length;
+  const tOrders    = trashed(orders || []);
+  const total      = tBiz.length + tProd.length + tSales.length + tAssets.length + tBookings.length + tSubs.length + tBizExp.length + tOrders.length;
 
   const purgeAll = () => setConfirm({
     msg: "Vider la corbeille définitivement ?",
     sub: "Tous les éléments seront effacés de façon permanente. Irréversible.",
     onOk: async () => {
-      for (const x of tBiz)      await bizA.hardDel(x.id);
-      for (const x of tProd)     await prodA.hardDel(x.id);
+      for (const x of tBiz)  await bizA.hardDel(x.id);
+      for (const x of tProd) {
+        for (const url of (x.images || [])) await deleteStorageImage(url).catch(() => {});
+        await prodA.hardDel(x.id);
+      }
       for (const x of tSales)    await saleA.hardDel(x.id);
       for (const x of tAssets)   await assetA.hardDel(x.id);
       for (const x of tBookings) await bookingA.hardDel(x.id);
       for (const x of tSubs)     await subA.hardDel(x.id);
       for (const x of tBizExp)   await bizExpenseA.hardDel(x.id);
+      for (const x of tOrders)   await deleteOrderHard(x.id);
       setConfirm(null);
     }
   });
@@ -79,7 +85,11 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
             )}
           />
           <Section title="Produits" items={tProd}
-            onRestore={id => prodA.restore(id)} onHardDel={id => prodA.hardDel(id)}
+            onRestore={id => prodA.restore(id)} onHardDel={async id => {
+              const p = tProd.find(x => x.id === id);
+              for (const url of (p?.images || [])) await deleteStorageImage(url).catch(() => {});
+              await prodA.hardDel(id);
+            }}
             renderRow={p => (
               <>
                 <p style={{ fontWeight: 500 }}>{p.name}</p>
@@ -138,6 +148,17 @@ export default function Trash({ biz, bizA, prods, prodA, sales, saleA, rentalAss
               <>
                 <p style={{ fontWeight: 500 }}>{e.label}</p>
                 <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>{euro(e.amount)} · {e.date}</p>
+              </>
+            )}
+          />
+          <Section title="Commandes" items={tOrders}
+            onRestore={id => orderA.restore(id)} onHardDel={id => deleteOrderHard(id)}
+            renderRow={o => (
+              <>
+                <p style={{ fontWeight: 500 }}>{o.reference}</p>
+                <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 2 }}>
+                  {o.supplier ? `${o.supplier} · ` : ""}{o.date}
+                </p>
               </>
             )}
           />

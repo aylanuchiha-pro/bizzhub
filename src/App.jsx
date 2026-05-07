@@ -15,6 +15,8 @@ import Partners from "./views/Partners";
 import Subscriptions from "./views/Subscriptions";
 import BizExpenses from "./views/BizExpenses";
 import Trash from "./views/Trash";
+import Orders from "./views/Orders";
+import Changelog from "./views/Changelog";
 
 // ─── Generic Supabase action factory ─────────────────────────────
 // BUG FIX : mapper.to(item, null) envoyait user_id:null → rejeté par RLS.
@@ -54,6 +56,27 @@ const mkActions = (table, mapper, state, setState, userId, onError) => ({
   },
 });
 
+const mkSimpleActions = (table, mapper, state, setState, userId, onError) => ({
+  add: async item => {
+    const prev = state;
+    setState(s => [...s, item]);
+    const { error } = await supabase.from(table).insert(mapper.to(item, userId));
+    if (error) { setState(prev); console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement."); }
+  },
+  update: async item => {
+    const prev = state;
+    setState(s => s.map(x => x.id === item.id ? item : x));
+    const { error } = await supabase.from(table).upsert(mapper.to(item, userId));
+    if (error) { setState(prev); console.error(`[${table}] update:`, error.message); onError?.("Erreur lors de la mise à jour."); }
+  },
+  hardDel: async id => {
+    const prev = state;
+    setState(s => s.filter(x => x.id !== id));
+    const { error } = await supabase.from(table).delete().eq("id", id);
+    if (error) { setState(prev); console.error(`[${table}] hardDel:`, error.message); onError?.("Erreur lors de la suppression."); }
+  },
+});
+
 const mkPaymentActions = (payments, setState, userId, onError) => ({
   add: async item => {
     const prev = payments;
@@ -78,7 +101,7 @@ const Loader = () => (
 const TAB_LABELS = {
   dashboard: "Dashboard", products: "Produits & Stock", sales: "Ventes",
   rentals: "Locations", partners: "Partenaires", subscriptions: "Abonnements",
-  bizexpenses: "Frais", businesses: "Activités", trash: "Corbeille",
+  bizexpenses: "Frais", businesses: "Activités", commandes: "Commandes", changelog: "Nouveautés", trash: "Corbeille",
 };
 
 export default function App() {
@@ -101,6 +124,9 @@ export default function App() {
   const [subs, setSubs] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [bizExpenses, setBizExpenses] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [orderItems, setOrderItems] = useState([]);
+  const [focusProduct, setFocusProduct] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -116,6 +142,7 @@ export default function App() {
         setBiz([]); setProds([]); setSales([]);
         setRentalAssets([]); setRentalBookings([]);
         setPartners([]); setSalePartners([]); setPayments([]); setSubs([]); setExpenses([]); setBizExpenses([]);
+        setOrders([]); setOrderItems([]); setFocusProduct(null);
         setTab("dashboard"); setLoaded(true);
       }
     });
@@ -144,7 +171,7 @@ export default function App() {
       });
     };
     try {
-      const [b, p, s, ra, rb, pt, sp, pm, sb, ex] = await Promise.allSettled([
+      const [b, p, s, ra, rb, pt, sp, pm, sb, ex, od, oi] = await Promise.allSettled([
         tq("businesses",       supabase.from("businesses").select("*").eq("user_id", userId)),
         tq("products",         supabase.from("products").select("id,user_id,biz_id,name,category,buy_price,sell_price,stock,unit,description,deleted_at,created_at,size,sizes,images,available").eq("user_id", userId)),
         tq("sales",            supabase.from("sales").select("*").eq("user_id", userId)),
@@ -155,6 +182,8 @@ export default function App() {
         tq("partner_payments", supabase.from("partner_payments").select("*").eq("user_id", userId)),
         tq("subscriptions",    supabase.from("subscriptions").select("*").eq("user_id", userId)),
         tq("product_expenses", supabase.from("product_expenses").select("*").eq("user_id", userId)),
+        tq("orders",           supabase.from("orders").select("*").eq("user_id", userId)),
+        tq("order_items",      supabase.from("order_items").select("*").eq("user_id", userId)),
       ]);
       console.log(`[load] TOTAL: ${Math.round(performance.now() - t0)}ms`);
 
@@ -173,6 +202,8 @@ export default function App() {
       setPayments(get(pm,"partner_payments").map(M.payment.from));
       setSubs(get(sb,"subscriptions").filter(keep).map(M.sub.from));
       setExpenses(get(ex,"product_expenses").map(M.expense.from));
+      setOrders(get(od,"orders").filter(keep).map(M.order.from));
+      setOrderItems(get(oi,"order_items").map(M.orderItem.from));
 
       setDark(localStorage.getItem("bhub_theme") === "dark");
 
@@ -194,6 +225,20 @@ export default function App() {
     setToast(msg);
     setTimeout(() => setToast(null), 5000);
   };
+
+  const orderA      = mkActions("orders",       M.order,     orders,      setOrders,      userId, showError);
+  const orderItemA  = mkSimpleActions("order_items", M.orderItem, orderItems, setOrderItems, userId, showError);
+
+  const deleteOrderHard = async id => {
+    const prevOrders = orders;
+    const prevItems = orderItems;
+    setOrders(s => s.filter(x => x.id !== id));
+    setOrderItems(s => s.filter(x => x.orderId !== id));
+    const { error } = await supabase.from("orders").delete().eq("id", id);
+    if (error) { setOrders(prevOrders); setOrderItems(prevItems); showError("Erreur lors de la suppression définitive."); }
+  };
+
+  const onNavigateToProduct = productId => { setTab("products"); setFocusProduct(productId); };
 
   const bizA     = mkActions("businesses",     M.biz,     biz,            setBiz,            userId, showError);
   const prodA    = mkActions("products",        M.prod,    prods,          setProds,          userId, showError);
@@ -265,13 +310,17 @@ export default function App() {
   const aBiz = active(biz);
   const trashCount =
     trashed(biz).length + trashed(prods).length + trashed(sales).length +
-    trashed(rentalAssets).length + trashed(subs).length + trashed(bizExpenses).length;
+    trashed(rentalAssets).length + trashed(rentalBookings).length + trashed(subs).length +
+    trashed(bizExpenses).length + trashed(orders).length;
 
   const shared = {
     biz, prods, sales, rentalAssets, rentalBookings,
     partners, salePartners, payments, subs, expenses, bizExpenses,
+    orders, orderItems,
     bizA, prodA, saleA, assetA, bookingA,
     partnerA, spA, subA, paymentA, expenseA, bizExpenseA, deleteBiz,
+    orderA, orderItemA, deleteOrderHard,
+    focusProduct, setFocusProduct, onNavigateToProduct,
   };
 
   const views = {
@@ -283,6 +332,8 @@ export default function App() {
     partners:      <Partners {...shared} />,
     subscriptions: <Subscriptions {...shared} />,
     businesses:    <Businesses {...shared} />,
+    commandes:     <Orders {...shared} />,
+    changelog:     <Changelog />,
     trash:         <Trash {...shared} />,
   };
 

@@ -126,7 +126,7 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
     const stockValue      = fProds.filter(p => p.category === "physical").reduce((a, p) => a + szStock(p) * (p.buyPrice || 0), 0);
     const expensesTotal   = fExpenses.reduce((a, e) => a + (e.amount || 0), 0);
     const bizExpTotal     = fBizExpenses.reduce((a, e) => a + (e.amount || 0), 0);
-    const tresorerie      = salesCa + rentalCa - allSalesCost - rentalPropCost - stockValue - expensesTotal - bizExpTotal;
+    const tresorerie      = salesCa + rentalCa - allSalesCost - rentalPropCost - (from ? 0 : stockValue) - expensesTotal - bizExpTotal;
 
     const byBiz = aBiz.map(b => {
       const bs    = fSales.filter(s => s.bizId === b.id);
@@ -166,7 +166,7 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
       .map(p => ({ ...p, _stock: szStock(p) }));
 
     return { totalCa, totalProfit, netProfit, monthlyCharges, stockValue, expensesTotal, bizExpTotal, tresorerie, byBiz, monthly, lowStock };
-  }, [fSales, fBookings, aAssets, fProds, aBiz, fSubs, fExpenses, fBizExpenses]);
+  }, [fSales, fBookings, aAssets, fProds, aBiz, fSubs, fExpenses, fBizExpenses, from]);
 
   const recent = [...fSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
@@ -185,8 +185,8 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
   return (
     <div>
       {/* ── Filtres ── */}
-      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+      <div className="filter-bar" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {PERIODS.map(p => (
             <button key={p.id} style={btnPill(period === p.id)} onClick={() => setPeriod(p.id)}>{p.l}</button>
           ))}
@@ -195,15 +195,15 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
         {period === "custom" && (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--tx)" }} />
+              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--txt)" }} />
             <span style={{ fontSize: 11, color: "var(--mut)" }}>→</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--tx)" }} />
+              style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--txt)" }} />
           </div>
         )}
 
         {aBiz.length > 0 && (
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", borderLeft: "1px solid var(--brd)", paddingLeft: 10 }}>
+          <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap", borderLeft: "1px solid var(--brd)", paddingLeft: 10 }}>
             <button style={btnPill(selBiz === "all")} onClick={() => setSelBiz("all")}>Toutes</button>
             {aBiz.map(b => (
               <button key={b.id} style={btnPill(selBiz === b.id, b.color)} onClick={() => setSelBiz(selBiz === b.id ? "all" : b.id)}>

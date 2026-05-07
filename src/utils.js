@@ -95,4 +95,12 @@ export const M = {
     from: r => ({ id: r.id, bizId: r.biz_id || null, productId: r.product_id || null, label: r.label, amount: r.amount, date: r.expense_date, notes: r.notes || "", deletedAt: dt(r.deleted_at) }),
     to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId || null, product_id: o.productId || null, label: o.label, amount: o.amount, expense_date: o.date, notes: o.notes, deleted_at: iso(o.deletedAt) }),
   },
+  order: {
+    from: r => ({ id: r.id, bizId: r.biz_id || null, reference: r.reference, supplier: r.supplier || "", date: r.order_date, expectedDate: r.expected_date || null, status: r.status || "en_attente", notes: r.notes || "", deletedAt: dt(r.deleted_at) }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, biz_id: o.bizId || null, reference: o.reference, supplier: o.supplier || null, order_date: o.date, expected_date: o.expectedDate || null, status: o.status, notes: o.notes, deleted_at: iso(o.deletedAt) }),
+  },
+  orderItem: {
+    from: r => ({ id: r.id, orderId: r.order_id, productId: r.product_id || null, name: r.name, qty: r.qty, unitPrice: r.unit_price, size: r.size || null, notes: r.notes || "" }),
+    to: (o, uid) => ({ id: o.id, user_id: uid, order_id: o.orderId, product_id: o.productId || null, name: o.name, qty: o.qty, unit_price: o.unitPrice, size: o.size || null, notes: o.notes }),
+  },
 };
