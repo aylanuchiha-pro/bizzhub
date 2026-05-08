@@ -395,7 +395,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     setEditStock(null);
   };
 
-  const handleSell = (product, { qty, sellPrice, date, notes, size, paymentStatus, depositAmount, withPartner, partnerId, sharePct }) => {
+  const handleSell = async (product, { qty, sellPrice, date, notes, size, paymentStatus, depositAmount, withPartner, partnerId, sharePct }) => {
     if (product.category === "physical") {
       if (hasSizes(product) && size) {
         const newSizes = { ...product.sizes, [size]: Math.max(0, (product.sizes[size] || 0) - qty) };
@@ -407,7 +407,7 @@ export default function Products({ prods, prodA, biz, sales, saleA, expenses, ex
     }
     const saleId = uid();
     const tc = totalCost(product);
-    saleA.add({ id: saleId, bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: tc, date, notes, size: hasSizes(product) ? size : null, paymentStatus: paymentStatus || "complet", depositAmount: depositAmount || 0, deletedAt: null });
+    await saleA.add({ id: saleId, bizId: product.bizId, productId: product.id, name: product.name, qty, sellPrice, costPrice: tc, date, notes, size: hasSizes(product) ? size : null, paymentStatus: paymentStatus || "complet", depositAmount: depositAmount || 0, deletedAt: null });
     if (withPartner && partnerId) {
       const profit = (sellPrice - tc) * qty;
       spA.add({ id: uid(), saleId, partnerId, sharePct, amountDue: profit * sharePct / 100 });
