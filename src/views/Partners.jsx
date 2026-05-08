@@ -3,7 +3,7 @@ import { uid, today, active } from "../utils";
 import { euro } from "../utils";
 import { Btn, Lbl, F, Card, THead, Empty, Confirm, Modal, SectionTitle } from "../components/ui";
 
-export default function Partners({ partners, partnerA, sales, salePartners, spA, payments, paymentA }) {
+export default function Partners({ partners, partnerA, sales, salePartners, spA, payments, paymentA, biz }) {
   const [addName, setAddName] = useState("");
   const [addNotes, setAddNotes] = useState("");
   const [err, setErr] = useState(false);
@@ -12,7 +12,7 @@ export default function Partners({ partners, partnerA, sales, salePartners, spA,
   const [payAmt, setPayAmt] = useState("");
   const [payDate, setPayDate] = useState(today());
   const [payNotes, setPayNotes] = useState("");
-  const [selectedPartner, setSelectedPartner] = useState(null); // for detail view
+  const [detailModal, setDetailModal] = useState(null);
 
   const aPartners = active(partners);
   const aSales = active(sales);
@@ -82,105 +82,113 @@ export default function Partners({ partners, partnerA, sales, salePartners, spA,
       {aPartners.length === 0 ? (
         <Empty icon="◈" text="Aucun partenaire. Ajoutez votre premier associé ci-dessus." />
       ) : (
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
-          {/* Partners list */}
-          <div style={{ flex: "1 1 320px" }}>
-            <SectionTitle>Partenaires & balances</SectionTitle>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {aPartners.map(p => {
-                const s = getStats(p.id);
-                const isSelected = selectedPartner?.id === p.id;
-                return (
-                  <Card key={p.id} style={{ padding: "16px 20px", cursor: "pointer", borderLeft: isSelected ? "3px solid var(--ac)" : "3px solid transparent" }}
-                    onClick={() => setSelectedPartner(isSelected ? null : p)}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--acb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "var(--ac)", flexShrink: 0 }}>
-                        {p.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontWeight: 600 }}>{p.name}</p>
-                        {p.notes && <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>{p.notes}</p>}
-                        <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 3 }}>{s.count} vente(s) impliquée(s)</p>
-                      </div>
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <p style={{ fontSize: 12, color: "var(--mut)" }}>Total dû</p>
-                        <p style={{ fontWeight: 700, fontSize: 16, color: "var(--warn)" }}>{euro(s.totalDue)}</p>
-                        <p style={{ fontSize: 11, color: s.balance > 0 ? "var(--err)" : "var(--ok)", marginTop: 2 }}>
-                          Solde : {euro(s.balance)}
-                        </p>
-                      </div>
+        <div>
+          <SectionTitle>Partenaires & balances</SectionTitle>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {aPartners.map(p => {
+              const s = getStats(p.id);
+              return (
+                <Card key={p.id} style={{ padding: "16px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--acb)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, color: "var(--ac)", flexShrink: 0 }}>
+                      {p.name.charAt(0).toUpperCase()}
                     </div>
-                    <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
-                      <Btn sm variant="success" onClick={e => { e.stopPropagation(); openPayModal(p); }}>Enregistrer un paiement</Btn>
-                      <Btn sm variant="err" onClick={e => { e.stopPropagation(); softDel(p); }}>Supprimer</Btn>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 600 }}>{p.name}</p>
+                      {p.notes && <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 1 }}>{p.notes}</p>}
+                      <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 3 }}>{s.count} vente(s) impliquée(s)</p>
                     </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Detail panel */}
-          {selectedPartner && (
-            <div style={{ flex: "1 1 320px" }}>
-              <SectionTitle>Détail — {selectedPartner.name}</SectionTitle>
-
-              {/* Sales linked */}
-              {getPartnerSales(selectedPartner.id).length > 0 && (
-                <Card style={{ overflow: "hidden", marginBottom: 14 }}>
-                  <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--brd)" }}>
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>Ventes impliquées</p>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <p style={{ fontSize: 12, color: "var(--mut)" }}>Total dû</p>
+                      <p style={{ fontWeight: 700, fontSize: 16, color: "var(--warn)" }}>{euro(s.totalDue)}</p>
+                      <p style={{ fontSize: 11, color: s.balance > 0 ? "var(--err)" : "var(--ok)", marginTop: 2 }}>
+                        Solde : {euro(s.balance)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="tbl-wrap">
-                    <table style={{ width: "100%", fontSize: 12, minWidth: 380 }}>
-                      <THead cols={["Vente", "Date", "Part", "Montant dû"]} />
-                      <tbody>
-                        {getPartnerSales(selectedPartner.id).map((sp, i) => (
-                          <tr key={i} style={{ borderTop: "1px solid var(--brd)" }}>
-                            <td style={{ padding: "10px 14px", fontWeight: 500 }}>{sp.sale.name}</td>
-                            <td style={{ padding: "10px 14px", color: "var(--mut)", whiteSpace: "nowrap" }}>
-                              {new Date(sp.sale.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" })}
-                            </td>
-                            <td style={{ padding: "10px 14px", color: "var(--sub)" }}>{sp.sharePct}%</td>
-                            <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--warn)" }}>{euro(sp.amountDue)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+                    <Btn sm onClick={() => setDetailModal(p)}>Voir les ventes</Btn>
+                    <Btn sm variant="success" onClick={() => openPayModal(p)}>Enregistrer un paiement</Btn>
+                    <Btn sm variant="err" onClick={() => softDel(p)}>Supprimer</Btn>
                   </div>
                 </Card>
-              )}
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-              {/* Payments made */}
-              {partnerPayments(selectedPartner.id).length > 0 && (
-                <Card style={{ overflow: "hidden" }}>
-                  <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--brd)" }}>
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>Paiements versés</p>
-                  </div>
-                  <table style={{ width: "100%", fontSize: 12 }}>
-                    <THead cols={["Date", "Montant", "Notes"]} />
+      {detailModal && (() => {
+        const ps = getPartnerSales(detailModal.id);
+        const pmts = partnerPayments(detailModal.id);
+        const stats = getStats(detailModal.id);
+        const bN = id => (biz || []).find(b => b.id === id)?.name ?? "—";
+        return (
+          <Modal title={`Ventes — ${detailModal.name}`} onClose={() => setDetailModal(null)} width={660}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
+              {[
+                { l: "Total dû", v: euro(stats.totalDue), c: "var(--warn)" },
+                { l: "Déjà versé", v: euro(stats.totalPaid), c: "var(--ok)" },
+                { l: "Solde restant", v: euro(stats.balance), c: stats.balance > 0 ? "var(--err)" : "var(--ok)" },
+              ].map((x, i) => (
+                <div key={i} style={{ padding: "10px 14px", background: "var(--surf)", borderRadius: 8, border: "1px solid var(--brd)", textAlign: "center" }}>
+                  <p style={{ fontSize: 11, color: "var(--mut)", marginBottom: 4 }}>{x.l}</p>
+                  <p style={{ fontWeight: 700, color: x.c, fontSize: 15 }}>{x.v}</p>
+                </div>
+              ))}
+            </div>
+            {ps.length > 0 ? (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Ventes impliquées ({ps.length})</p>
+                <div className="tbl-wrap">
+                  <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", minWidth: 440 }}>
+                    <THead cols={["Désignation", "Activité", "Date", "CA", "Part", "Montant dû"]} />
                     <tbody>
-                      {partnerPayments(selectedPartner.id).map(pm => (
-                        <tr key={pm.id} style={{ borderTop: "1px solid var(--brd)" }}>
+                      {ps.map((sp, i) => (
+                        <tr key={i} style={{ borderTop: "1px solid var(--brd)" }}>
+                          <td style={{ padding: "10px 14px", fontWeight: 500 }}>{sp.sale.name}</td>
+                          <td style={{ padding: "10px 14px", color: "var(--sub)" }}>{bN(sp.sale.bizId)}</td>
                           <td style={{ padding: "10px 14px", color: "var(--mut)", whiteSpace: "nowrap" }}>
-                            {new Date(pm.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" })}
+                            {new Date(sp.sale.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" })}
                           </td>
-                          <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--ok)" }}>{euro(pm.amount)}</td>
-                          <td style={{ padding: "10px 14px", color: "var(--mut)" }}>{pm.notes || "—"}</td>
+                          <td style={{ padding: "10px 14px", color: "var(--ac)", fontWeight: 500 }}>{euro(sp.sale.sellPrice * sp.sale.qty)}</td>
+                          <td style={{ padding: "10px 14px", color: "var(--sub)" }}>{sp.sharePct}%</td>
+                          <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--warn)" }}>{euro(sp.amountDue)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </Card>
-              )}
-
-              {getPartnerSales(selectedPartner.id).length === 0 && partnerPayments(selectedPartner.id).length === 0 && (
-                <Empty text="Aucune vente ou paiement lié à ce partenaire." />
-              )}
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: 13, color: "var(--mut)", textAlign: "center", padding: "20px 0" }}>Aucune vente liée à ce partenaire.</p>
+            )}
+            {pmts.length > 0 && (
+              <div style={{ marginTop: 4 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Paiements versés ({pmts.length})</p>
+                <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                  <THead cols={["Date", "Montant", "Notes"]} />
+                  <tbody>
+                    {pmts.map(pm => (
+                      <tr key={pm.id} style={{ borderTop: "1px solid var(--brd)" }}>
+                        <td style={{ padding: "10px 14px", color: "var(--mut)", whiteSpace: "nowrap" }}>
+                          {new Date(pm.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "2-digit" })}
+                        </td>
+                        <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--ok)" }}>{euro(pm.amount)}</td>
+                        <td style={{ padding: "10px 14px", color: "var(--mut)" }}>{pm.notes || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+              <Btn variant="success" onClick={() => { setDetailModal(null); openPayModal(detailModal); }}>Enregistrer un paiement</Btn>
+              <Btn onClick={() => setDetailModal(null)}>Fermer</Btn>
             </div>
-          )}
-        </div>
-      )}
+          </Modal>
+        );
+      })()}
 
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
 

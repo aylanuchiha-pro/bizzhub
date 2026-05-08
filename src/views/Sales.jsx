@@ -183,7 +183,7 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, saleP
   };
   const handleBiz = id => { set("bizId", id); set("productId", ""); set("name", ""); set("sellPrice", ""); set("costPrice", ""); set("size", ""); };
 
-  const submit = () => {
+  const submit = async () => {
     const e = {};
     if (!form.bizId) e.bizId = true;
     if (!form.name.trim()) e.name = true;
@@ -207,7 +207,8 @@ export default function Sales({ sales, saleA, prods, prodA, biz, partners, saleP
     const sN = parseFloat(form.sellPrice), cN = parseFloat(form.costPrice) || 0;
     const depN = form.paymentStatus === "acompte" ? parseFloat(form.depositAmount) || 0 : 0;
     const saleId = uid();
-    saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, paymentStatus: form.paymentStatus || "complet", depositAmount: depN, deletedAt: null });
+    // Attendre que la vente soit en DB avant d'ajouter le sale_partner (contrainte FK)
+    await saleA.add({ id: saleId, bizId: form.bizId, productId: form.productId || null, name: form.name.trim(), qty: qN, sellPrice: sN, costPrice: cN, date: form.date, notes: form.notes.trim(), size: form.size || null, paymentStatus: form.paymentStatus || "complet", depositAmount: depN, deletedAt: null });
 
     if (form.productId) {
       const prod = active(prods).find(p => p.id === form.productId);
