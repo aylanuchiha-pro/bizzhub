@@ -188,7 +188,7 @@ export const SizesToggle = ({ form, set, setForm }) => {
 // ── Main exported modal ───────────────────────────────────────────
 // product=null → création, product=obj → édition
 // onCreated(product) → appelé uniquement à la création (pour lier à une commande, etc.)
-export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, onCreated, onClose }) {
+export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, onCreated, onClose, fromOrder }) {
   const vehicleInit = product ? (parseVehicleDesc(product.description) || emptyVehicleFields) : emptyVehicleFields;
 
   const [form, setForm] = useState(product ? {
@@ -208,9 +208,9 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
 
   const save = () => {
     if (!form.name.trim() || !form.bizId) return;
-    const computedStock = form.sizes ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0) : parseInt(form.stock) || 0;
+    const computedStock = fromOrder ? 0 : (form.sizes ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0) : parseInt(form.stock) || 0);
     const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
-    const built = { ...form, description, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: form.sizes || null };
+    const built = { ...form, description, buyPrice: parseFloat(form.buyPrice) || 0, sellPrice: parseFloat(form.sellPrice) || 0, stock: computedStock, sizes: fromOrder ? null : (form.sizes || null) };
     pendingDeletes.forEach(deleteStorageImage);
     if (product) {
       prodA.update(built);
@@ -249,7 +249,7 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
         <F label="Prix de vente (€)">
           <input type="number" value={form.sellPrice} onChange={e => set("sellPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" />
         </F>
-        {form.category === "physical" && <>
+        {form.category === "physical" && !fromOrder && <>
           {!form.sizes && (<>
             <F label="Stock"><input type="number" value={form.stock} onChange={e => set("stock", e.target.value)} onFocus={e => e.target.select()} min="0" /></F>
             <F label="Unité"><select value={form.unit} onChange={e => set("unit", e.target.value)}>{UNITS.map(u => <option key={u}>{u}</option>)}</select></F>
@@ -257,6 +257,11 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
           <SizesToggle form={form} set={set} setForm={setForm} />
           {form.sizes && <SizesGrid sizes={form.sizes} onChange={v => set("sizes", v)} />}
         </>}
+        {form.category === "physical" && fromOrder && (
+          <div style={{ gridColumn: "1/-1", fontSize: 12, color: "var(--mut)", padding: "8px 12px", background: "var(--surf)", borderRadius: 8, border: "1px solid var(--brd)" }}>
+            Stock : 0 — sera mis à jour lors de la réception de la commande
+          </div>
+        )}
         <VehicleToggle form={form} set={set} />
         {form.isVehicle
           ? <VehicleFields form={form} set={set} />

@@ -86,17 +86,21 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const [sizeQtys, setSizeQtys] = useState(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {}));
+  const [useSizeGrid, setUseSizeGrid] = useState(false);
 
   const selProd = bizProds.find(p => p.id === form.productId);
-  // Grille par taille : produit avec map sizes configurée
   const hasSizesMap = selProd && selProd.sizes && typeof selProd.sizes === "object";
-  const showSizeGrid = !item && hasSizesMap;
-  // Dropdown taille simple : produit physique sans map sizes
-  const showSizeDrop = !item && selProd?.category === "physical" && !hasSizesMap;
+  // Grille par taille : produit avec map sizes OU toggle activé manuellement
+  const showSizeGrid = !item && (hasSizesMap || useSizeGrid);
+  // Toggle visible pour les produits physiques sans map sizes
+  const showSizeToggle = !item && selProd?.category === "physical" && !hasSizesMap;
+  // Dropdown taille simple : physique, sans map, toggle désactivé
+  const showSizeDrop = showSizeToggle && !useSizeGrid;
   const totalSizeQty = SIZES.reduce((a, s) => a + (sizeQtys[s] || 0), 0);
 
   const pickProd = id => {
     const reset = SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {});
+    setUseSizeGrid(false);
     if (!id) { set("productId", ""); setSizeQtys(reset); return; }
     const p = bizProds.find(x => x.id === id);
     if (!p) return;
@@ -137,6 +141,14 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
         <F label="Désignation" col="1/-1">
           <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Nom de l'article" />
         </F>
+        {showSizeToggle && (
+          <div style={{ gridColumn: "1/-1" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none" }}>
+              <input type="checkbox" checked={useSizeGrid} onChange={e => { setUseSizeGrid(e.target.checked); setSizeQtys(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {})); }} style={{ width: 15, height: 15, cursor: "pointer" }} />
+              <span style={{ color: useSizeGrid ? "var(--ac)" : "var(--sub)", fontWeight: useSizeGrid ? 600 : 400 }}>Gérer par taille (S / M / L…)</span>
+            </label>
+          </div>
+        )}
         {showSizeGrid ? (
           <div style={{ gridColumn: "1/-1" }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: "var(--sub)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Quantités par taille</p>
@@ -616,6 +628,7 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
           aBiz={aBiz}
           prodA={prodA}
           defaultBizId={newProdFor.order.bizId}
+          fromOrder
           onCreated={prod => {
             setNewProdFor(null);
             setItemModal({
