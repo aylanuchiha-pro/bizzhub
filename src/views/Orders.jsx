@@ -175,8 +175,36 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
     return true;
   });
 
+  const receiveOrder = async order => {
+    const items = orderItems.filter(i => i.orderId === order.id && i.productId);
+    for (const item of items) {
+      const prod = prods.find(p => p.id === item.productId);
+      if (!prod || prod.category !== "physical") continue;
+      const prevStock = prod.stock || 0;
+      const newStock = prevStock + item.qty;
+      // CMUP : coût moyen unitaire pondéré pour garder buyPrice cohérent
+      const newBuyPrice = newStock > 0
+        ? Math.round(((prevStock * (prod.buyPrice || 0)) + (item.qty * item.unitPrice)) / newStock * 100) / 100
+        : prod.buyPrice;
+      if (prod.sizes && item.size && SIZES.includes(item.size)) {
+        const newSizes = { ...prod.sizes, [item.size]: (prod.sizes[item.size] || 0) + item.qty };
+        await prodA.update({ ...prod, sizes: newSizes, stock: newStock, buyPrice: newBuyPrice });
+      } else {
+        await prodA.update({ ...prod, stock: newStock, buyPrice: newBuyPrice });
+      }
+    }
+    await orderA.update({ ...order, status: "recu" });
+  };
+
   const addOrder = form => orderA.add({ ...form, id: uid() });
-  const editOrder = form => orderA.update(form);
+  const editOrder = form => {
+    const prev = orders.find(o => o.id === form.id);
+    if (prev && prev.status !== "recu" && form.status === "recu") {
+      receiveOrder(form);
+    } else {
+      orderA.update(form);
+    }
+  };
   const addItem = form => orderItemA.add({ ...form, id: uid() });
   const editItem = form => orderItemA.update(form);
 
@@ -266,6 +294,13 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
 
         <div style={{ display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
           <Btn variant="pri" sm onClick={() => setItemModal({ order: o })}>+ Article</Btn>
+          {o.status !== "recu" && o.status !== "annule" && (
+            <Btn variant="success" sm onClick={() => setConfirm({
+              msg: `Valider la réception de "${o.reference}" ?`,
+              sub: "Le stock des produits liés sera mis à jour.",
+              onOk: () => { receiveOrder(o); setConfirm(null); },
+            })}>✓ Reçu</Btn>
+          )}
           <Btn variant="ghost" sm onClick={() => setOrderModal(o)}>Éditer</Btn>
           <Btn variant="err" sm onClick={() => delOrder(o)}>Supprimer</Btn>
         </div>
@@ -419,8 +454,15 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
                         </div>
                       )}
 
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: 12, borderTop: "1px solid var(--brd)" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: o.status !== "recu" && o.status !== "annule" ? "1fr 1fr" : "1fr 1fr 1fr", gap: 8, padding: 12, borderTop: "1px solid var(--brd)" }}>
                         <Btn variant="pri" onClick={() => setItemModal({ order: o })} full>+ Article</Btn>
+                        {o.status !== "recu" && o.status !== "annule" && (
+                          <Btn variant="success" onClick={() => setConfirm({
+                            msg: `Valider la réception de "${o.reference}" ?`,
+                            sub: "Le stock des produits liés sera mis à jour.",
+                            onOk: () => { receiveOrder(o); setConfirm(null); },
+                          })} full>✓ Reçu</Btn>
+                        )}
                         <Btn variant="ghost" onClick={() => setOrderModal(o)} full>Éditer</Btn>
                         <Btn variant="err" onClick={() => delOrder(o)} full>Supprimer</Btn>
                       </div>
