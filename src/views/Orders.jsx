@@ -629,12 +629,10 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
           prodA={prodA}
           defaultBizId={newProdFor.order.bizId}
           fromOrder
-          onCreated={prod => {
+          onSaveItem={items => {
+            const orderId = newProdFor.order.id;
             setNewProdFor(null);
-            setItemModal({
-              order: newProdFor.order,
-              prefill: { productId: prod.id, name: prod.name, unitPrice: String(prod.buyPrice || "") },
-            });
+            addItem(items.map(i => ({ ...i, orderId })));
           }}
           onClose={() => {
             setNewProdFor(null);

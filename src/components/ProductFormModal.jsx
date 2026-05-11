@@ -188,7 +188,7 @@ export const SizesToggle = ({ form, set, setForm }) => {
 // ── Main exported modal ───────────────────────────────────────────
 // product=null → création, product=obj → édition
 // onCreated(product) → appelé uniquement à la création (pour lier à une commande, etc.)
-export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, onCreated, onClose, fromOrder }) {
+export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, onCreated, onClose, fromOrder, onSaveItem }) {
   const vehicleInit = product ? (parseVehicleDesc(product.description) || emptyVehicleFields) : emptyVehicleFields;
 
   const [form, setForm] = useState(product ? {
@@ -206,6 +206,12 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
   const [pendingDeletes, setPendingDeletes] = useState([]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Champs quantité (uniquement quand fromOrder + onSaveItem)
+  const [itemQty, setItemQty] = useState("1");
+  const [itemUseSizes, setItemUseSizes] = useState(false);
+  const [itemSizeQtys, setItemSizeQtys] = useState(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {}));
+  const itemTotalSizeQty = SIZES.reduce((a, s) => a + (itemSizeQtys[s] || 0), 0);
+
   const save = () => {
     if (!form.name.trim() || !form.bizId) return;
     const computedStock = fromOrder ? 0 : (form.sizes ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0) : parseInt(form.stock) || 0);
@@ -218,8 +224,18 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
     } else {
       const withId = { ...built, id: uid(), deletedAt: null };
       prodA.add(withId);
-      if (onCreated) {
-        onCreated(withId); // le caller ferme lui-même la modale
+      if (fromOrder && onSaveItem) {
+        if (itemUseSizes) {
+          const items = SIZES.filter(s => (itemSizeQtys[s] || 0) > 0)
+            .map(s => ({ productId: withId.id, name: withId.name, qty: itemSizeQtys[s], unitPrice: withId.buyPrice || 0, size: s, notes: "" }));
+          if (items.length === 0) return;
+          onSaveItem(items);
+        } else {
+          const q = Math.max(1, parseInt(itemQty) || 1);
+          onSaveItem([{ productId: withId.id, name: withId.name, qty: q, unitPrice: withId.buyPrice || 0, size: "", notes: "" }]);
+        }
+      } else if (onCreated) {
+        onCreated(withId);
       } else {
         onClose();
       }
@@ -268,6 +284,41 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
           : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
         }
       </div>
+
+      {fromOrder && onSaveItem && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ height: 1, background: "var(--brd)", margin: "14px 0" }} />
+          <p style={{ fontSize: 11, fontWeight: 600, color: "var(--mut)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>Quantité pour cette commande</p>
+          {form.category === "physical" && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, userSelect: "none", marginBottom: 12 }}>
+              <input type="checkbox" checked={itemUseSizes} onChange={e => { setItemUseSizes(e.target.checked); setItemSizeQtys(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {})); }} style={{ width: 15, height: 15, cursor: "pointer" }} />
+              <span style={{ color: itemUseSizes ? "var(--ac)" : "var(--sub)", fontWeight: itemUseSizes ? 600 : 400 }}>Gérer par taille (S / M / L…)</span>
+            </label>
+          )}
+          {itemUseSizes ? (
+            <>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {SIZES.map(s => (
+                  <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "var(--ac)", letterSpacing: ".04em" }}>{s}</label>
+                    <input type="number" min="0" value={itemSizeQtys[s] || 0}
+                      onChange={e => setItemSizeQtys(q => ({ ...q, [s]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                      onFocus={e => e.target.select()}
+                      style={{ width: 58, textAlign: "center", padding: "6px 4px" }} />
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 8 }}>Total : <strong style={{ color: "var(--ac)" }}>{itemTotalSizeQty}</strong></p>
+            </>
+          ) : (
+            <div style={{ maxWidth: 140 }}>
+              <Lbl>Quantité</Lbl>
+              <input type="number" min="1" value={itemQty} onChange={e => setItemQty(e.target.value)} onFocus={e => e.target.select()} />
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ marginTop: 14 }}>
         <Lbl>Photos (max 5)</Lbl>
         <PhotosField
@@ -278,7 +329,10 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
         <Btn onClick={onClose}>Annuler</Btn>
-        <Btn variant="pri" onClick={save} disabled={!form.name.trim() || !form.bizId}>Enregistrer</Btn>
+        <Btn variant="pri" onClick={save}
+          disabled={!form.name.trim() || !form.bizId || (fromOrder && onSaveItem && itemUseSizes && itemTotalSizeQty === 0)}>
+          {fromOrder && onSaveItem ? "Créer et ajouter à la commande" : (product ? "Enregistrer" : "Créer le produit")}
+        </Btn>
       </div>
     </Modal>
   );
