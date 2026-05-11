@@ -219,7 +219,32 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
     for (const [productId, prodItems] of Object.entries(byProd)) {
       const prod = prods.find(p => p.id === productId);
       if (!prod || prod.category !== "physical") continue;
+
+      const prevStock = prod.stock || 0;
       let newSizes = prod.sizes ? { ...prod.sizes } : null;
+
+      // Auto-activer les tailles si le produit n'en avait pas mais des articles en ont
+      if (!newSizes) {
+        const recBySz = {};
+        for (const item of prodItems)
+          if (item.size && SIZES.includes(item.size))
+            recBySz[item.size] = (recBySz[item.size] || 0) + item.qty;
+        const recSizes = Object.keys(recBySz);
+        if (recSizes.length > 0) {
+          newSizes = SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {});
+          // Distribuer le stock existant proportionnellement aux tailles reçues
+          const totalRecQty = recSizes.reduce((a, s) => a + recBySz[s], 0);
+          let distributed = 0;
+          recSizes.forEach((s, i) => {
+            const portion = i < recSizes.length - 1
+              ? Math.round(prevStock * recBySz[s] / totalRecQty)
+              : prevStock - distributed;
+            newSizes[s] = portion;
+            distributed += portion;
+          });
+        }
+      }
+
       let addedQty = 0, addedCost = 0;
       for (const item of prodItems) {
         addedQty += item.qty;
@@ -227,7 +252,6 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
         if (newSizes && item.size && SIZES.includes(item.size))
           newSizes[item.size] = (newSizes[item.size] || 0) + item.qty;
       }
-      const prevStock = prod.stock || 0;
       const newStock = newSizes ? SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0) : prevStock + addedQty;
       const newBuyPrice = addedCost > 0 && newStock > 0
         ? Math.round(((prevStock * (prod.buyPrice || 0)) + addedCost) / newStock * 100) / 100
