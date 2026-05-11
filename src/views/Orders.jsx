@@ -202,6 +202,7 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
   const [itemModal, setItemModal] = useState(null);   // null | { order, item?, prefill? }
   const [newProdFor, setNewProdFor] = useState(null); // null | { order }
   const [confirm, setConfirm] = useState(null);
+  const [sizeConflict, setSizeConflict] = useState(null); // null | [{ id, name }]
   const [filterBiz, setFilterBiz] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [searchQ, setSearchQ] = useState("");
@@ -273,10 +274,34 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
     await orderA.update({ ...order, status: "recu" });
   };
 
+  const findSizeConflicts = orderId => {
+    const seen = new Set();
+    const conflicts = [];
+    for (const item of orderItems.filter(i => i.orderId === orderId && i.productId && i.size && SIZES.includes(i.size))) {
+      if (seen.has(item.productId)) continue;
+      seen.add(item.productId);
+      const prod = prods.find(p => p.id === item.productId);
+      if (prod?.category === "physical" && !prod.sizes) conflicts.push({ id: prod.id, name: prod.name });
+    }
+    return conflicts;
+  };
+
+  const handleReceive = o => {
+    const conflicts = findSizeConflicts(o.id);
+    if (conflicts.length > 0) { setSizeConflict(conflicts); return; }
+    setConfirm({
+      msg: `Valider la réception de "${o.reference}" ?`,
+      sub: "Le stock des produits liés sera mis à jour.",
+      onOk: () => { receiveOrder(o); setConfirm(null); },
+    });
+  };
+
   const addOrder = form => orderA.add({ ...form, id: uid() });
   const editOrder = form => {
     const prev = orders.find(o => o.id === form.id);
     if (prev && prev.status !== "recu" && form.status === "recu") {
+      const conflicts = findSizeConflicts(form.id);
+      if (conflicts.length > 0) { setSizeConflict(conflicts); return; }
       receiveOrder(form);
     } else {
       orderA.update(form);
@@ -416,11 +441,7 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
         <div style={{ display: "flex", gap: 8 }} onClick={e => e.stopPropagation()}>
           <Btn variant="pri" sm onClick={() => setItemModal({ order: o })}>+ Article</Btn>
           {o.status !== "recu" && o.status !== "annule" && (
-            <Btn variant="success" sm onClick={() => setConfirm({
-              msg: `Valider la réception de "${o.reference}" ?`,
-              sub: "Le stock des produits liés sera mis à jour.",
-              onOk: () => { receiveOrder(o); setConfirm(null); },
-            })}>✓ Reçu</Btn>
+            <Btn variant="success" sm onClick={() => handleReceive(o)}>✓ Reçu</Btn>
           )}
           <Btn variant="ghost" sm onClick={() => setOrderModal(o)}>Éditer</Btn>
           <Btn variant="err" sm onClick={() => delOrder(o)}>Supprimer</Btn>
@@ -578,11 +599,7 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
                       <div style={{ display: "grid", gridTemplateColumns: o.status !== "recu" && o.status !== "annule" ? "1fr 1fr" : "1fr 1fr 1fr", gap: 8, padding: 12, borderTop: "1px solid var(--brd)" }}>
                         <Btn variant="pri" onClick={() => setItemModal({ order: o })} full>+ Article</Btn>
                         {o.status !== "recu" && o.status !== "annule" && (
-                          <Btn variant="success" onClick={() => setConfirm({
-                            msg: `Valider la réception de "${o.reference}" ?`,
-                            sub: "Le stock des produits liés sera mis à jour.",
-                            onOk: () => { receiveOrder(o); setConfirm(null); },
-                          })} full>✓ Reçu</Btn>
+                          <Btn variant="success" onClick={() => handleReceive(o)} full>✓ Reçu</Btn>
                         )}
                         <Btn variant="ghost" onClick={() => setOrderModal(o)} full>Éditer</Btn>
                         <Btn variant="err" onClick={() => delOrder(o)} full>Supprimer</Btn>
@@ -600,6 +617,28 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
 
       {/* ── Modals ── */}
       {confirm && <Confirm {...confirm} onCancel={() => setConfirm(null)} />}
+      {sizeConflict && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.52)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 20px" }}>
+          <div style={{ background: "var(--w)", borderRadius: 14, padding: 28, maxWidth: 440, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+            <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>⚠ Tailles non configurées</p>
+            <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: 14 }}>
+              La commande reste en attente. Les produits suivants ont des articles avec tailles, mais leur stock n'est pas encore géré par taille. Configurez-les avant de recevoir la commande :
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {sizeConflict.map(p => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", background: "var(--surf)", borderRadius: 8, border: "1px solid var(--brd)" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</span>
+                  <Btn sm variant="ghost" onClick={() => { setSizeConflict(null); onNavigateToProduct(p.id); }}>Configurer →</Btn>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 12, color: "var(--mut)", marginBottom: 18, padding: "8px 12px", background: "rgba(217,119,6,.06)", borderRadius: 8, border: "1px solid rgba(217,119,6,.2)" }}>
+              Produits → Modifier le produit → activer "Gérer le stock par taille"
+            </p>
+            <Btn onClick={() => setSizeConflict(null)} full>Compris</Btn>
+          </div>
+        </div>
+      )}
       {orderModal && (
         <OrderModal
           order={orderModal === "add" ? null : orderModal}
