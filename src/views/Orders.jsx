@@ -88,8 +88,11 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
   const [sizeQtys, setSizeQtys] = useState(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {}));
 
   const selProd = bizProds.find(p => p.id === form.productId);
-  // Grille multi-tailles uniquement pour un NOUVEL article lié à un produit à tailles
-  const showSizeGrid = !item && selProd && selProd.sizes !== null && typeof selProd.sizes === "object";
+  // Grille par taille : produit avec map sizes configurée
+  const hasSizesMap = selProd && selProd.sizes && typeof selProd.sizes === "object";
+  const showSizeGrid = !item && hasSizesMap;
+  // Dropdown taille simple : produit physique sans map sizes
+  const showSizeDrop = !item && selProd?.category === "physical" && !hasSizesMap;
   const totalSizeQty = SIZES.reduce((a, s) => a + (sizeQtys[s] || 0), 0);
 
   const pickProd = id => {
@@ -155,6 +158,14 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
             <input type="number" min="1" value={form.qty} onChange={e => set("qty", e.target.value)} onFocus={e => e.target.select()} />
           </F>
         )}
+        {showSizeDrop && (
+          <F label="Taille">
+            <select value={form.size || ""} onChange={e => set("size", e.target.value)}>
+              <option value="">— Sans taille —</option>
+              {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </F>
+        )}
         <F label="Prix unitaire (€)">
           <input type="number" min="0" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" />
         </F>
@@ -201,7 +212,6 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
 
   const receiveOrder = async order => {
     const items = orderItems.filter(i => i.orderId === order.id && i.productId);
-    // Grouper par produit pour éviter de lire un état stale dans la boucle
     const byProd = {};
     for (const item of items) {
       (byProd[item.productId] = byProd[item.productId] || []).push(item);
@@ -213,14 +223,13 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
       let addedQty = 0, addedCost = 0;
       for (const item of prodItems) {
         addedQty += item.qty;
-        addedCost += item.qty * item.unitPrice;
+        addedCost += item.qty * (item.unitPrice || 0);
         if (newSizes && item.size && SIZES.includes(item.size))
           newSizes[item.size] = (newSizes[item.size] || 0) + item.qty;
       }
       const prevStock = prod.stock || 0;
       const newStock = newSizes ? SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0) : prevStock + addedQty;
-      // CMUP : coût moyen unitaire pondéré
-      const newBuyPrice = newStock > 0
+      const newBuyPrice = addedCost > 0 && newStock > 0
         ? Math.round(((prevStock * (prod.buyPrice || 0)) + addedCost) / newStock * 100) / 100
         : prod.buyPrice;
       await prodA.update({ ...prod, sizes: newSizes, stock: newStock, buyPrice: newBuyPrice });
@@ -237,6 +246,7 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
       orderA.update(form);
     }
   };
+
   const addItem = async forms => {
     const list = Array.isArray(forms) ? forms : [forms];
     for (const form of list) await orderItemA.add({ ...form, id: uid() });
