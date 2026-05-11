@@ -196,14 +196,13 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
 
   return (
     <div>
-      {/* ── Filtres ── */}
-      <div className="filter-bar" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      {/* ── Filtres desktop ── */}
+      <div className="mhide filter-bar" style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
           {PERIODS.map(p => (
             <button key={p.id} style={btnPill(period === p.id)} onClick={() => setPeriod(p.id)}>{p.l}</button>
           ))}
         </div>
-
         {period === "custom" && (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
@@ -213,7 +212,6 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
               style={{ fontSize: 12, padding: "4px 8px", border: "1px solid var(--brd)", borderRadius: 6, background: "var(--bg)", color: "var(--txt)" }} />
           </div>
         )}
-
         {aBiz.length > 0 && (
           <div className="pills" style={{ display: "flex", gap: 5, flexWrap: "wrap", borderLeft: "1px solid var(--brd)", paddingLeft: 10 }}>
             <button style={btnPill(selBiz === "all")} onClick={() => setSelBiz("all")}>Toutes</button>
@@ -222,6 +220,32 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
                 {b.name}
               </button>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Filtres mobile ── */}
+      <div className="mshow" style={{ display: "none", gap: 8, marginBottom: 14, flexDirection: "column" }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <select value={period} onChange={e => setPeriod(e.target.value)}
+            style={{ flex: 1, fontSize: 13, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--brd)", background: "var(--surf)", color: "var(--txt)", fontFamily: "inherit" }}>
+            {PERIODS.map(p => <option key={p.id} value={p.id}>{p.l}</option>)}
+          </select>
+          {aBiz.length > 0 && (
+            <select value={selBiz} onChange={e => setSelBiz(e.target.value)}
+              style={{ flex: 1, fontSize: 13, padding: "7px 10px", borderRadius: 8, border: "1px solid var(--brd)", background: "var(--surf)", color: "var(--txt)", fontFamily: "inherit" }}>
+              <option value="all">Toutes activités</option>
+              {aBiz.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
+        </div>
+        {period === "custom" && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ flex: 1, fontSize: 13, padding: "7px 10px", border: "1px solid var(--brd)", borderRadius: 8, background: "var(--surf)", color: "var(--txt)" }} />
+            <span style={{ fontSize: 12, color: "var(--mut)" }}>→</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ flex: 1, fontSize: 13, padding: "7px 10px", border: "1px solid var(--brd)", borderRadius: 8, background: "var(--surf)", color: "var(--txt)" }} />
           </div>
         )}
       </div>
