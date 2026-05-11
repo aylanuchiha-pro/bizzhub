@@ -15,7 +15,7 @@ const szStock = p => p.sizes && SIZES.some(s => (p.sizes[s] || 0) > 0)
   ? SIZES.reduce((a, s) => a + (p.sizes[s] || 0), 0)
   : (p.stock || 0);
 
-export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBookings, subs, expenses, bizExpenses }) {
+export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBookings, subs, expenses, bizExpenses, orders, orderItems }) {
   const [period,   setPeriod]   = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo,   setDateTo]   = useState("");
@@ -99,6 +99,15 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
     return aSubs.filter(x => !x.bizId || x.bizId === selBiz);
   }, [aSubs, selBiz]);
 
+  // Commandes en attente (argent sorti mais stock pas encore mis à jour)
+  const fPendingOrders = useMemo(() => {
+    let o = active(orders || []).filter(x => x.status === "en_attente" || x.status === "recu_partiel");
+    if (from) o = o.filter(x => x.date >= from);
+    if (to)   o = o.filter(x => x.date <= to);
+    if (selBiz !== "all") o = o.filter(x => x.bizId === selBiz);
+    return o;
+  }, [orders, from, to, selBiz]);
+
   const bizName  = id => aBiz.find(b => b.id === id)?.name ?? "—";
   const bizColor = id => aBiz.find(b => b.id === id)?.color ?? "var(--mut)";
 
@@ -126,7 +135,10 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
     const stockValue      = fProds.filter(p => p.category === "physical").reduce((a, p) => a + szStock(p) * (p.buyPrice || 0), 0);
     const expensesTotal   = fExpenses.reduce((a, e) => a + (e.amount || 0), 0);
     const bizExpTotal     = fBizExpenses.reduce((a, e) => a + (e.amount || 0), 0);
-    const tresorerie      = salesCa + rentalCa - allSalesCost - rentalPropCost - (from ? 0 : stockValue) - expensesTotal - bizExpTotal;
+    const aOrderItems     = orderItems || [];
+    const pendingOrdersCost = fPendingOrders.reduce((total, o) =>
+      total + aOrderItems.filter(i => i.orderId === o.id).reduce((s, i) => s + i.qty * (i.unitPrice || 0), 0), 0);
+    const tresorerie      = salesCa + rentalCa - allSalesCost - rentalPropCost - (from ? 0 : stockValue) - expensesTotal - bizExpTotal - pendingOrdersCost;
 
     const byBiz = aBiz.map(b => {
       const bs    = fSales.filter(s => s.bizId === b.id);
@@ -165,8 +177,8 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
       .filter(p => p.category === "physical" && szStock(p) <= LOW)
       .map(p => ({ ...p, _stock: szStock(p) }));
 
-    return { totalCa, totalProfit, netProfit, monthlyCharges, stockValue, expensesTotal, bizExpTotal, tresorerie, byBiz, monthly, lowStock };
-  }, [fSales, fBookings, aAssets, fProds, aBiz, fSubs, fExpenses, fBizExpenses, from]);
+    return { totalCa, totalProfit, netProfit, monthlyCharges, stockValue, expensesTotal, bizExpTotal, tresorerie, byBiz, monthly, lowStock, pendingOrdersCost };
+  }, [fSales, fBookings, aAssets, fProds, aBiz, fSubs, fExpenses, fBizExpenses, from, fPendingOrders, orderItems]);
 
   const recent = [...fSales].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
@@ -220,7 +232,7 @@ export default function Dashboard({ biz, prods, sales, rentalAssets, rentalBooki
         <KPI label="Bénéfice brut" value={euro(stats.totalProfit)} color={stats.totalProfit >= 0 ? "var(--ok)" : "var(--err)"} sub={`Marge : ${pct(stats.totalProfit, stats.totalCa)}`} />
         <KPI label="Charges mensuelles" value={euro(stats.monthlyCharges)} color="var(--warn)" sub={`${fSubs.length} abonnement(s) actif(s)`} />
         <KPI label="Bénéfice net" value={euro(stats.netProfit)} color={stats.netProfit >= 0 ? "var(--ok)" : "var(--err)"} sub="après charges récurrentes" />
-        <KPI label="Trésorerie réelle" value={euro(stats.tresorerie)} color={stats.tresorerie >= 0 ? "var(--ok)" : "var(--err)"} sub={`Stock : ${euro(stats.stockValue)} · Frais : ${euro(stats.bizExpTotal + stats.expensesTotal)}`} />
+        <KPI label="Trésorerie réelle" value={euro(stats.tresorerie)} color={stats.tresorerie >= 0 ? "var(--ok)" : "var(--err)"} sub={`Stock : ${euro(stats.stockValue)} · Frais : ${euro(stats.bizExpTotal + stats.expensesTotal)}${stats.pendingOrdersCost > 0 ? ` · Cmds en attente : -${euro(stats.pendingOrdersCost)}` : ""}`} />
       </div>
 
       <div className="cg2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14, marginBottom: 14 }}>
