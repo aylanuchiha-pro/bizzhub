@@ -85,21 +85,35 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
         : { orderId: order.id, productId: "", name: "", qty: "1", unitPrice: "", size: "", notes: "" }
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [sizeQtys, setSizeQtys] = useState(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {}));
 
   const selProd = bizProds.find(p => p.id === form.productId);
-  const hasSizes = selProd?.sizes && SIZES.some(s => (selProd.sizes[s] ?? 0) > 0);
+  // Grille multi-tailles uniquement pour un NOUVEL article lié à un produit à tailles
+  const showSizeGrid = !item && selProd && selProd.sizes !== null && typeof selProd.sizes === "object";
+  const totalSizeQty = SIZES.reduce((a, s) => a + (sizeQtys[s] || 0), 0);
 
   const pickProd = id => {
-    if (!id) { set("productId", ""); return; }
+    const reset = SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {});
+    if (!id) { set("productId", ""); setSizeQtys(reset); return; }
     const p = bizProds.find(x => x.id === id);
     if (!p) return;
     setForm(f => ({ ...f, productId: id, name: p.name, unitPrice: String(p.buyPrice || ""), size: "" }));
+    setSizeQtys(reset);
   };
 
   const save = () => {
-    const q = parseInt(form.qty, 10);
-    if (!form.name.trim() || !(q > 0)) return;
-    onSave({ ...form, qty: q, unitPrice: parseFloat(form.unitPrice) || 0, name: form.name.trim(), notes: form.notes.trim() });
+    const price = parseFloat(form.unitPrice) || 0;
+    if (!form.name.trim()) return;
+    if (showSizeGrid) {
+      const items = SIZES.filter(s => (sizeQtys[s] || 0) > 0)
+        .map(s => ({ orderId: form.orderId, productId: form.productId, name: form.name.trim(), qty: sizeQtys[s], unitPrice: price, size: s, notes: form.notes.trim() }));
+      if (items.length === 0) return;
+      onSave(items);
+    } else {
+      const q = parseInt(form.qty, 10);
+      if (!(q > 0)) return;
+      onSave({ ...form, qty: q, unitPrice: price, name: form.name.trim(), notes: form.notes.trim() });
+    }
     onClose();
   };
 
@@ -120,17 +134,27 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
         <F label="Désignation" col="1/-1">
           <input value={form.name} onChange={e => set("name", e.target.value)} placeholder="Nom de l'article" />
         </F>
-        {hasSizes && (
-          <F label="Taille" col="1/-1">
-            <select value={form.size || ""} onChange={e => set("size", e.target.value)}>
-              <option value="">— Taille —</option>
-              {SIZES.filter(s => (selProd.sizes[s] ?? 0) >= 0).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+        {showSizeGrid ? (
+          <div style={{ gridColumn: "1/-1" }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "var(--sub)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 8 }}>Quantités par taille</p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {SIZES.map(s => (
+                <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "var(--ac)", letterSpacing: ".04em" }}>{s}</label>
+                  <input type="number" min="0" value={sizeQtys[s] || 0}
+                    onChange={e => setSizeQtys(q => ({ ...q, [s]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    onFocus={e => e.target.select()}
+                    style={{ width: 58, textAlign: "center", padding: "6px 4px" }} />
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: "var(--mut)", marginTop: 8 }}>Total : <strong style={{ color: "var(--ac)" }}>{totalSizeQty}</strong></p>
+          </div>
+        ) : (
+          <F label="Quantité">
+            <input type="number" min="1" value={form.qty} onChange={e => set("qty", e.target.value)} onFocus={e => e.target.select()} />
           </F>
         )}
-        <F label="Quantité">
-          <input type="number" min="1" value={form.qty} onChange={e => set("qty", e.target.value)} onFocus={e => e.target.select()} />
-        </F>
         <F label="Prix unitaire (€)">
           <input type="number" min="0" value={form.unitPrice} onChange={e => set("unitPrice", e.target.value)} onFocus={e => e.target.select()} placeholder="0.00" />
         </F>
@@ -140,7 +164,7 @@ const ItemModal = ({ item, order, prods, onSave, onCreateProd, onClose, prefill 
       </div>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
         <Btn onClick={onClose}>Annuler</Btn>
-        <Btn variant="pri" onClick={save} disabled={!form.name.trim() || !(parseInt(form.qty) > 0)}>
+        <Btn variant="pri" onClick={save} disabled={!form.name.trim() || (showSizeGrid ? totalSizeQty === 0 : !(parseInt(form.qty) > 0))}>
           {item ? "Enregistrer" : "Ajouter"}
         </Btn>
       </div>
@@ -177,21 +201,29 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
 
   const receiveOrder = async order => {
     const items = orderItems.filter(i => i.orderId === order.id && i.productId);
+    // Grouper par produit pour éviter de lire un état stale dans la boucle
+    const byProd = {};
     for (const item of items) {
-      const prod = prods.find(p => p.id === item.productId);
+      (byProd[item.productId] = byProd[item.productId] || []).push(item);
+    }
+    for (const [productId, prodItems] of Object.entries(byProd)) {
+      const prod = prods.find(p => p.id === productId);
       if (!prod || prod.category !== "physical") continue;
-      const prevStock = prod.stock || 0;
-      const newStock = prevStock + item.qty;
-      // CMUP : coût moyen unitaire pondéré pour garder buyPrice cohérent
-      const newBuyPrice = newStock > 0
-        ? Math.round(((prevStock * (prod.buyPrice || 0)) + (item.qty * item.unitPrice)) / newStock * 100) / 100
-        : prod.buyPrice;
-      if (prod.sizes && item.size && SIZES.includes(item.size)) {
-        const newSizes = { ...prod.sizes, [item.size]: (prod.sizes[item.size] || 0) + item.qty };
-        await prodA.update({ ...prod, sizes: newSizes, stock: newStock, buyPrice: newBuyPrice });
-      } else {
-        await prodA.update({ ...prod, stock: newStock, buyPrice: newBuyPrice });
+      let newSizes = prod.sizes ? { ...prod.sizes } : null;
+      let addedQty = 0, addedCost = 0;
+      for (const item of prodItems) {
+        addedQty += item.qty;
+        addedCost += item.qty * item.unitPrice;
+        if (newSizes && item.size && SIZES.includes(item.size))
+          newSizes[item.size] = (newSizes[item.size] || 0) + item.qty;
       }
+      const prevStock = prod.stock || 0;
+      const newStock = newSizes ? SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0) : prevStock + addedQty;
+      // CMUP : coût moyen unitaire pondéré
+      const newBuyPrice = newStock > 0
+        ? Math.round(((prevStock * (prod.buyPrice || 0)) + addedCost) / newStock * 100) / 100
+        : prod.buyPrice;
+      await prodA.update({ ...prod, sizes: newSizes, stock: newStock, buyPrice: newBuyPrice });
     }
     await orderA.update({ ...order, status: "recu" });
   };
@@ -205,7 +237,10 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
       orderA.update(form);
     }
   };
-  const addItem = form => orderItemA.add({ ...form, id: uid() });
+  const addItem = async forms => {
+    const list = Array.isArray(forms) ? forms : [forms];
+    for (const form of list) await orderItemA.add({ ...form, id: uid() });
+  };
   const editItem = form => orderItemA.update(form);
 
   const delOrder = o => setConfirm({
