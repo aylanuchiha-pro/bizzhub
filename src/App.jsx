@@ -23,11 +23,10 @@ import Changelog from "./views/Changelog";
 // Maintenant userId est passé explicitement à la factory.
 const mkActions = (table, mapper, state, setState, userId, onError) => ({
   add: async item => {
-    const prev = state;
     setState(s => [...s, item]);
     const row = mapper.to(item, userId);
     const { error } = await supabase.from(table).insert(row);
-    if (error) { setState(prev); console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement. Vérifiez votre connexion."); }
+    if (error) { setState(s => s.filter(x => x.id !== item.id)); console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement. Vérifiez votre connexion."); }
   },
   update: async item => {
     const prev = state;
@@ -58,10 +57,9 @@ const mkActions = (table, mapper, state, setState, userId, onError) => ({
 
 const mkSimpleActions = (table, mapper, state, setState, userId, onError) => ({
   add: async item => {
-    const prev = state;
     setState(s => [...s, item]);
     const { error } = await supabase.from(table).insert(mapper.to(item, userId));
-    if (error) { setState(prev); console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement."); }
+    if (error) { setState(s => s.filter(x => x.id !== item.id)); console.error(`[${table}] add:`, error.message); onError?.("Erreur lors de l'enregistrement."); }
   },
   update: async item => {
     const prev = state;

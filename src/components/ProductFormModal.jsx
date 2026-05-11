@@ -212,7 +212,7 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
   const [itemSizeQtys, setItemSizeQtys] = useState(SIZES.reduce((a, s) => ({ ...a, [s]: 0 }), {}));
   const itemTotalSizeQty = SIZES.reduce((a, s) => a + (itemSizeQtys[s] || 0), 0);
 
-  const save = () => {
+  const save = async () => {
     if (!form.name.trim() || !form.bizId) return;
     const computedStock = fromOrder ? 0 : (form.sizes ? SIZES.reduce((a, s) => a + (form.sizes[s] || 0), 0) : parseInt(form.stock) || 0);
     const description = form.isVehicle ? encodeVehicleDesc(form) : form.description;
@@ -223,7 +223,8 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
       onClose();
     } else {
       const withId = { ...built, id: uid(), deletedAt: null };
-      prodA.add(withId);
+      // Attendre que le produit soit en DB avant d'insérer les articles (évite l'erreur FK)
+      await prodA.add(withId);
       if (fromOrder && onSaveItem) {
         if (itemUseSizes) {
           const items = SIZES.filter(s => (itemSizeQtys[s] || 0) > 0)
