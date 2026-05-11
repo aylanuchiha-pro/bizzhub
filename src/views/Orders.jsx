@@ -277,16 +277,56 @@ export default function Orders({ orders, orderItems, orderA, orderItemA, biz, pr
   };
   const editItem = form => orderItemA.update(form);
 
+  const reverseStock = async (items) => {
+    const byProd = {};
+    for (const item of items) {
+      if (!item.productId) continue;
+      (byProd[item.productId] = byProd[item.productId] || []).push(item);
+    }
+    for (const [productId, prodItems] of Object.entries(byProd)) {
+      const prod = prods.find(p => p.id === productId);
+      if (!prod || prod.category !== "physical") continue;
+      let newSizes = prod.sizes ? { ...prod.sizes } : null;
+      let removedQty = 0;
+      for (const item of prodItems) {
+        removedQty += item.qty;
+        if (newSizes && item.size && SIZES.includes(item.size))
+          newSizes[item.size] = Math.max(0, (newSizes[item.size] || 0) - item.qty);
+      }
+      const newStock = newSizes
+        ? SIZES.reduce((a, s) => a + (newSizes[s] || 0), 0)
+        : Math.max(0, (prod.stock || 0) - removedQty);
+      await prodA.update({ ...prod, sizes: newSizes, stock: newStock });
+    }
+  };
+
   const delOrder = o => setConfirm({
     msg: `Supprimer "${o.reference}" ?`,
-    sub: "La commande sera déplacée dans la corbeille pendant 30 jours.",
-    onOk: () => { orderA.softDel(o.id); setExpandedId(null); setConfirm(null); },
+    sub: o.status === "recu"
+      ? "Le stock des produits liés sera diminué. La commande sera déplacée dans la corbeille."
+      : "La commande sera déplacée dans la corbeille pendant 30 jours.",
+    onOk: async () => {
+      if (o.status === "recu") {
+        await reverseStock(orderItems.filter(i => i.orderId === o.id));
+      }
+      orderA.softDel(o.id);
+      setExpandedId(null);
+      setConfirm(null);
+    },
   });
 
-  const delItem = item => setConfirm({
-    msg: `Supprimer "${item.name}" de la commande ?`,
-    onOk: () => { orderItemA.hardDel(item.id); setConfirm(null); },
-  });
+  const delItem = item => {
+    const order = orders.find(o => o.id === item.orderId);
+    setConfirm({
+      msg: `Supprimer "${item.name}" de la commande ?`,
+      sub: order?.status === "recu" ? "Le stock du produit lié sera diminué en conséquence." : undefined,
+      onOk: async () => {
+        if (order?.status === "recu") await reverseStock([item]);
+        orderItemA.hardDel(item.id);
+        setConfirm(null);
+      },
+    });
+  };
 
   // ── Contenu déplié d'une commande (articles) ──────────────────
   const ExpandedContent = ({ o }) => {
