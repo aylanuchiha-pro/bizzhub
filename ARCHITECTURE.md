@@ -456,6 +456,16 @@ Composant statique, pas de props.
 - `className="mshow"` → visible seulement mobile (header hamburger)
 - Toutes les vues sont montées simultanément, navigation par `display: tab===id ? "block" : "none"`
 
+### Classes utilitaires mobile (theme.js)
+
+| Classe | Effet mobile (≤760px) | Usage |
+|---|---|---|
+| `.pills` | `overflow-x:auto; flex-wrap:nowrap; scrollbar masquée` | Rangée de boutons-filtres (activités, périodes) — défilement horizontal au lieu d'empiler sur plusieurs lignes |
+| `.filter-bar` | `flex-direction:column; align-items:stretch` | Conteneur de plusieurs groupes de filtres — empile chaque groupe sur sa propre ligne |
+| `.filter-bar .pills` | `border-left:none; padding-left:0` | Efface le séparateur visuel desktop quand les groupes sont empilés (ex. Dashboard) |
+
+**Règle :** toute rangée de pills avec `flexWrap:"wrap"` doit avoir `className="pills"` et `flex:1; minWidth:0` si elle cohabite avec un bouton d'action sur la même ligne (ex. BizExpenses, Sales).
+
 ---
 
 ## Supabase Storage (images produits)

@@ -72,11 +72,15 @@ export const PhotosField = ({ images, onAdd, onRemove }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState(null);
   const handleFileChange = async e => {
-    const file = e.target.files[0]; e.target.value = "";
-    if (!file) return;
+    const files = Array.from(e.target.files); e.target.value = "";
+    if (!files.length) return;
+    const slots = 5 - images.length;
+    const toUpload = files.slice(0, slots);
     setUploading(true); setUploadErr(null);
-    try { onAdd(await uploadImg(file)); }
-    catch (err) { setUploadErr(`Erreur : ${err?.message || "inconnue"}`); }
+    try {
+      const urls = await Promise.all(toUpload.map(uploadImg));
+      urls.forEach(url => onAdd(url));
+    } catch (err) { setUploadErr(`Erreur : ${err?.message || "inconnue"}`); }
     finally { setUploading(false); }
   };
   return (
@@ -92,7 +96,7 @@ export const PhotosField = ({ images, onAdd, onRemove }) => {
         {images.length < 5 && !uploading && (
           <label style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 13px", background: "var(--surf)", border: "1px dashed var(--brd)", borderRadius: 8, cursor: "pointer", fontSize: 13, color: "var(--sub)", flexShrink: 0 }}>
             <span>📷</span><span>{images.length === 0 ? "Ajouter des photos" : "Ajouter"}</span>
-            <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChange} />
+            <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleFileChange} />
           </label>
         )}
       </div>
@@ -282,7 +286,7 @@ export default function ProductFormModal({ product, aBiz, prodA, defaultBizId, o
         <VehicleToggle form={form} set={set} />
         {form.isVehicle
           ? <VehicleFields form={form} set={set} />
-          : <F label="Description" col="1/-1"><input value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" /></F>
+          : <F label="Description" col="1/-1"><textarea value={form.description} onChange={e => set("description", e.target.value)} placeholder="Variante, couleur…" rows={3} style={{ resize: "vertical", width: "100%", boxSizing: "border-box" }} /></F>
         }
       </div>
 
